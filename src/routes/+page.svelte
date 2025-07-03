@@ -14,16 +14,16 @@
 
   // Heatwave data parameters
   interface HeatwaveData {
-    startDate: string;
-    endDate: string;
-    duration: number;
-    tropicalDays: number;
-    highestTemp: number;
+    startDate: string
+    endDate: string
+    duration: number
+    tropicalDays: number
+    highestTemp: number
   }
-  
+
   // Global variables for temperature range
-  let globalMinTemp = 30;
-  let globalMaxTemp = 40;
+  let globalMinTemp = 30
+  let globalMaxTemp = 40
 
   // Heartbeat parameters
   type HeartbeatParams = {
@@ -35,6 +35,7 @@
     color: string
     opacity: number
     heatwaveData?: HeatwaveData
+    year: string // Added year for timing and display
   }
 
   // Data loading state
@@ -87,22 +88,22 @@
       }
 
       heatwaves = lines.slice(1).map((line, index) => {
-        const values = line.split(','); // GitHub CSV uses comma separators
-        const highestTemp = parseFloat(values[highestTempIndex]) || 0;
-        
+        const values = line.split(",") // GitHub CSV uses comma separators
+        const highestTemp = parseFloat(values[highestTempIndex]) || 0
+
         // Log every 10th record for debugging
         if (index % 10 === 0) {
-          console.log(`Record ${index} - Date: ${values[startDateIndex]}, Temp: ${highestTemp}°C`);
+          console.log(`Record ${index} - Date: ${values[startDateIndex]}, Temp: ${highestTemp}°C`)
         }
-        
+
         return {
           startDate: values[startDateIndex],
           endDate: values[endDateIndex],
           duration: parseInt(values[durationIndex]) || 0,
           tropicalDays: parseInt(values[tropicalDaysIndex]) || 0,
-          highestTemp: highestTemp
-        };
-      });
+          highestTemp: highestTemp,
+        }
+      })
 
       console.log(`Loaded ${heatwaves.length} heatwave records`)
 
@@ -110,19 +111,20 @@
       console.log("First 5 heatwave records:", heatwaves.slice(0, 5))
 
       // Find min and max temperatures for better scaling
-      const temperatures = heatwaves.map(hw => hw.highestTemp);
-      const minDataTemp = Math.min(...temperatures);
-      const maxDataTemp = Math.max(...temperatures);
-      console.log(`Actual temperature range in data: ${minDataTemp}°C to ${maxDataTemp}°C`);
-      
-      // Store the temperature range globally for use in heartbeat generation
-      globalMinTemp = minDataTemp;
-      globalMaxTemp = maxDataTemp;
-      
-      // Sort by temperature (descending)
-      heatwaves.sort((a, b) => b.highestTemp - a.highestTemp)
+      const temperatures = heatwaves.map((hw) => hw.highestTemp)
+      const minDataTemp = Math.min(...temperatures)
+      const maxDataTemp = Math.max(...temperatures)
+      console.log(`Actual temperature range in data: ${minDataTemp}°C to ${maxDataTemp}°C`)
 
-      // Generate heartbeats from all heatwave data
+      // Store the temperature range globally for use in heartbeat generation
+      globalMinTemp = minDataTemp
+      globalMaxTemp = maxDataTemp
+
+      // Use the original order from the CSV (first row first)
+      // No sorting needed - we'll use the data in the order it was loaded
+      console.log("Processing heartbeats in original data order (first row first)")
+
+      // Generate heartbeats from all heatwave data in original order
       heartbeats = heatwaves.map(generateHeartbeatFromHeatwave)
     } catch (error) {
       console.error("Error loading CSV data:", error)
@@ -138,20 +140,23 @@
   // Generate heartbeat parameters based on heatwave data
   function generateHeartbeatFromHeatwave(heatwave: HeatwaveData): HeartbeatParams {
     // Use random peak heights instead of temperature-based scaling
-    const minHeight = 30;   // Minimum height for peaks
-    const maxHeight = 120;  // Maximum height for peaks
-    
+    const minHeight = 60 // Increased minimum height for peaks
+    const maxHeight = 180 // Increased maximum height for peaks
+
     // Generate a random height for this heartbeat
-    const rHeight = minHeight + Math.random() * (maxHeight - minHeight);
-    
+    const rHeight = minHeight + Math.random() * (maxHeight - minHeight)
+
     // Generate random variations for other parameters
-    const randomFactor = Math.random() * 0.7 + 0.3; // 0.3-1.0 range
-    
+    const randomFactor = Math.random() * 0.7 + 0.3 // 0.3-1.0 range
+
     // Generate a random color in the red-orange-yellow spectrum
-    const hue = Math.floor(Math.random() * 60); // 0-60 range (red to yellow)
-    const color = `hsl(${hue}, 80%, 50%)`;
-    
-    console.log(`Heartbeat for ${heatwave.startDate}: Height=${rHeight.toFixed(0)}px, Color=${color}`);
+    const hue = Math.floor(Math.random() * 60) // 0-60 range (red to yellow)
+    const color = `hsl(${hue}, 80%, 50%)`
+
+    // Extract year from the start date (format is typically YYYY-MM-DD)
+    const year = heatwave.startDate.split("-")[0] || "Unknown"
+
+    console.log(`Heartbeat for ${year} (${heatwave.startDate}): Height=${rHeight.toFixed(0)}px`)
 
     return {
       pHeight: 10 + randomFactor * 15, // P wave: 10-25px
@@ -161,7 +166,8 @@
       tHeight: 15 + randomFactor * 20, // T wave: 15-35px
       color: color,
       opacity: 0.8,
-      heatwaveData: heatwave
+      heatwaveData: heatwave,
+      year: year, // Store the year for timing and display
     }
   }
 
@@ -191,16 +197,16 @@
   function generateHeartlinePath(params: HeartbeatParams): string {
     // Center the heartbeat in the SVG
     // Width of the entire visualization - centered
-    const lineWidth = width * 0.8;
-    const startX = (width - lineWidth) / 2; // Center the heartbeat
-    
+    const lineWidth = width * 0.8
+    const startX = (width - lineWidth) / 2 // Center the heartbeat
+
     // Extract parameters
-    const { pHeight, qDepth, rHeight, sDepth, tHeight } = params;
-    
+    const { pHeight, qDepth, rHeight, sDepth, tHeight } = params
+
     // Log the actual R peak position
-    const rPeakY = baselineY - rHeight;
-    console.log(`R peak will be drawn at Y: ${rPeakY} (baselineY: ${baselineY} - rHeight: ${rHeight})`);
-    
+    const rPeakY = baselineY - rHeight
+    console.log(`R peak will be drawn at Y: ${rPeakY} (baselineY: ${baselineY} - rHeight: ${rHeight})`)
+
     // Create segments for the PQRST pattern
     return [
       // Start with flat baseline
@@ -243,15 +249,31 @@
   let heartbeatProgress = 0
   let fadeOutProgress = 0
   let isFadingOut = false
-  let pauseBetweenHeartbeats = 500 // ms to pause between heartbeats
+  let pauseBetweenHeartbeats = 500 // Base pause between heartbeats (will be adjusted by year)
   let lastHeartbeatFinishTime = 0
+  let currentYear = "" // Current year being displayed
 
   // Animation function for sequential heartlines
   function animateHeartlinesSequentially(): void {
     const now = performance.now()
 
     // If we're in a pause between heartbeats
-    if (lastHeartbeatFinishTime > 0 && now - lastHeartbeatFinishTime < pauseBetweenHeartbeats) {
+    // Adjust pause duration based on the year gap between heartbeats
+    let adjustedPause = pauseBetweenHeartbeats
+
+    if (heartbeats.length > 0 && currentHeartbeatIndex > 0 && currentHeartbeatIndex < heartbeats.length) {
+      const currentYear = parseInt(heartbeats[currentHeartbeatIndex].year || "0")
+      const prevYear = parseInt(heartbeats[currentHeartbeatIndex - 1].year || "0")
+
+      if (currentYear > 0 && prevYear > 0) {
+        const yearGap = Math.max(1, currentYear - prevYear)
+        // Scale pause by year gap: longer pauses for bigger year gaps
+        adjustedPause = pauseBetweenHeartbeats * Math.min(yearGap, 5) // Cap at 5x normal pause
+        console.log(`Year gap: ${yearGap}, adjusted pause: ${adjustedPause}ms`)
+      }
+    }
+
+    if (lastHeartbeatFinishTime > 0 && now - lastHeartbeatFinishTime < adjustedPause) {
       animationFrame = requestAnimationFrame(animateHeartlinesSequentially)
       return
     }
@@ -270,26 +292,25 @@
 
     // Log current heartbeat data
     if (heartbeats.length > 0 && currentHeartbeatIndex < heartbeats.length) {
-      const currentHeatwave = heartbeats[currentHeartbeatIndex].heatwaveData;
-      const currentHeartbeat = heartbeats[currentHeartbeatIndex];
-      
+      const currentHeatwave = heartbeats[currentHeartbeatIndex].heatwaveData
+      const currentHeartbeat = heartbeats[currentHeartbeatIndex]
+
       // Log at the start of each heartbeat animation
       if (currentHeatwave && heartbeatProgress === 0 && !isFadingOut) {
-        console.log('-------------------------------------');
-        console.log(`HEARTBEAT ${currentHeartbeatIndex + 1}/${heartbeats.length}`);
-        console.log('Heatwave Data:', {
+        // Update the current year for display
+        currentYear = currentHeartbeat.year || ""
+
+        console.log("-------------------------------------")
+        console.log(`HEARTBEAT ${currentHeartbeatIndex + 1}/${heartbeats.length} - YEAR: ${currentYear}`)
+        console.log("Heatwave Data:", {
+          year: currentYear,
           startDate: currentHeatwave.startDate,
           endDate: currentHeatwave.endDate,
-          duration: currentHeatwave.duration + ' days',
+          duration: currentHeatwave.duration + " days",
           tropicalDays: currentHeatwave.tropicalDays,
-          highestTemp: currentHeatwave.highestTemp + '°C'
-        });
-        console.log('Visualization Parameters:', {
-          rHeight: Math.round(currentHeartbeat.rHeight) + 'px',
-          color: currentHeartbeat.color,
-          opacity: currentHeartbeat.opacity.toFixed(2)
-        });
-        console.log('-------------------------------------');
+          highestTemp: currentHeatwave.highestTemp + "°C",
+        })
+        console.log("-------------------------------------")
       }
     }
 
@@ -393,6 +414,11 @@
             stroke-width="1"
             opacity="0.5"
           />
+
+          <!-- Year display on the right side -->
+          <text x={width - 80} y={50} font-size="32" font-weight="bold" fill={heartbeats[currentHeartbeatIndex].color} text-anchor="end">
+            {currentYear}
+          </text>
 
           <path
             d={generateHeartlinePath(heartbeats[currentHeartbeatIndex])}
