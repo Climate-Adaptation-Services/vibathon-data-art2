@@ -362,33 +362,7 @@
             class="heartline-path"
           />
           
-          <!-- Temperature label for each heartbeat -->
-          {#if heartbeat.heatwaveData}
-            <text 
-              x={width * 0.1 + width * 0.8 * 0.4} 
-              y={baselineY - heartbeat.rHeight - 10} 
-              fill={heartbeat.color}
-              font-size="10"
-              text-anchor="middle"
-              opacity={heartbeat.opacity}
-              class="temp-label"
-            >
-              {heartbeat.heatwaveData.highestTemp}°C
-            </text>
-            
-            <!-- Date label -->
-            <text 
-              x={width * 0.1 + width * 0.8 * 0.8} 
-              y={baselineY - 5} 
-              fill={heartbeat.color}
-              font-size="8"
-              text-anchor="end"
-              opacity={heartbeat.opacity * 0.8}
-              class="date-label"
-            >
-              {heartbeat.heatwaveData.startDate}
-            </text>
-          {/if}
+          <!-- Text labels removed as requested -->
         </g>
       {/each}
     </svg>
