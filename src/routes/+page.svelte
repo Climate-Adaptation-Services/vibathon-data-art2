@@ -5,11 +5,12 @@
   const width = 800;
   const height = 300;
   const baselineY = height / 2;
+  // Center point for the heartbeat visualization
+  const centerX = width / 2;
   
   // Animation state
   let progress = 0;
   let animationFrame: number;
-  let heartlinePaths: {path: SVGPathElement | null, length: number}[] = [];
   
   // Heatwave data parameters
   type HeatwaveData = {
@@ -55,7 +56,7 @@
   
   // Parse CSV data
   async function loadHeatwaveData() {
-    const csvUrl = 'https://raw.githubusercontent.com/sophievanderhorst/data/refs/heads/main/heatwaves.csv';
+    const csvUrl = '/heatwaves.csv'; // Use local CSV file
     
     try {
       isLoading = true;
@@ -68,7 +69,7 @@
       
       const csvText = await response.text();
       const lines = csvText.trim().split('\n');
-      const headers = lines[0].split(',');
+      const headers = lines[0].split(','); // Use comma as separator
       
       // Find column indices
       const startDateIndex = headers.findIndex(h => h === 'Van');
@@ -81,27 +82,56 @@
         throw new Error('Required columns not found in CSV');
       }
       
-      heatwaves = lines.slice(1).map(line => {
-        const values = line.split(',');
+      // Log column indices
+      console.log('Column indices:', {
+        startDateIndex,
+        endDateIndex,
+        durationIndex,
+        tropicalDaysIndex,
+        highestTempIndex
+      });
+      
+      // Log a sample line
+      if (lines.length > 1) {
+        console.log('Sample line:', lines[1]);
+        console.log('Sample values:', lines[1].split(','));
+      }
+      
+      heatwaves = lines.slice(1).map((line, index) => {
+        const values = line.split(','); // Use comma as separator
+        const highestTemp = parseFloat(values[highestTempIndex]) || 0;
+        
+        // Log every 10th record for debugging
+        if (index % 10 === 0) {
+          console.log(`Record ${index} - Raw temp value: '${values[highestTempIndex]}', Parsed: ${highestTemp}`);
+        }
+        
         return {
           startDate: values[startDateIndex],
           endDate: values[endDateIndex],
           duration: parseInt(values[durationIndex]) || 0,
           tropicalDays: parseInt(values[tropicalDaysIndex]) || 0,
-          highestTemp: parseFloat(values[highestTempIndex]) || 0
+          highestTemp: highestTemp
         };
       });
       
       console.log(`Loaded ${heatwaves.length} heatwave records`);
       
+      // Log the first few records to inspect the data
+      console.log('First 5 heatwave records:', heatwaves.slice(0, 5));
+      
+      // Log temperature range
+      const temperatures = heatwaves.map(hw => hw.highestTemp);
+      const minTemp = Math.min(...temperatures);
+      const maxTemp = Math.max(...temperatures);
+      console.log(`Temperature range: ${minTemp}°C to ${maxTemp}°C`);
+      
       // Sort by temperature (descending)
       heatwaves.sort((a, b) => b.highestTemp - a.highestTemp);
       
-      // Take top 30 or all if less than 30
-      const topHeatwaves = heatwaves.slice(0, 30);
-      
-      // Generate heartbeats from heatwave data
-      heartbeats = topHeatwaves.map(generateHeartbeatFromHeatwave);
+      // Use all heatwaves, sorted by temperature
+      // Generate heartbeats from all heatwave data
+      heartbeats = heatwaves.map(generateHeartbeatFromHeatwave);
       
     } catch (error) {
       console.error('Error loading CSV data:', error);
@@ -116,14 +146,20 @@
   
   // Generate heartbeat parameters based on heatwave data
   function generateHeartbeatFromHeatwave(heatwave: HeatwaveData): HeartbeatParams {
-    // Scale R wave height based on temperature (30-42°C range mapped to 50-150px)
+    // Scale R wave height based on temperature (30-40°C range mapped to 30-200px)
     const minTemp = 30;
-    const maxTemp = 42;
-    const minHeight = 50;
-    const maxHeight = 150;
+    const maxTemp = 40;
+    const minHeight = 30;
+    const maxHeight = 200;
+    
+    // Log raw temperature value
+    console.log(`Raw temperature value: ${heatwave.highestTemp}°C (type: ${typeof heatwave.highestTemp})`);
     
     const tempNormalized = Math.min(Math.max(heatwave.highestTemp - minTemp, 0), maxTemp - minTemp) / (maxTemp - minTemp);
+    console.log(`Normalized temperature: ${tempNormalized.toFixed(4)}`);
+    
     const rHeight = minHeight + tempNormalized * (maxHeight - minHeight);
+    console.log(`Calculated rHeight: ${rHeight.toFixed(2)}px`);
     
     // Other parameters can be partially randomized but influenced by temperature
     const tempFactor = tempNormalized * 0.7 + 0.3; // 0.3-1.0 range based on temperature
@@ -164,12 +200,27 @@
   
   // Generate the heartline path for a specific set of parameters
   function generateHeartlinePath(params: HeartbeatParams): string {
-    // Width of the entire visualization
+    // Center the heartbeat in the SVG
+    // Width of the entire visualization - centered
     const lineWidth = width * 0.8;
-    const startX = width * 0.1;
+    const startX = (width - lineWidth) / 2; // Center the heartbeat
     
     // Extract parameters
     const { pHeight, qDepth, rHeight, sDepth, tHeight } = params;
+    
+    // Debug log the actual height values being used
+    console.log('SVG path generation with heights:', {
+      pHeight,
+      qDepth,
+      rHeight,
+      sDepth,
+      tHeight,
+      baselineY
+    });
+    
+    // Log the actual R peak position
+    const rPeakY = baselineY - rHeight;
+    console.log(`R peak will be drawn at Y: ${rPeakY} (baselineY: ${baselineY} - rHeight: ${rHeight})`);
     
     // Create segments for the PQRST pattern
     return [
@@ -211,7 +262,9 @@
   // Animation state for sequential animation
   let currentHeartbeatIndex = 0;
   let heartbeatProgress = 0;
-  let pauseBetweenHeartbeats = 300; // ms to pause between heartbeats
+  let fadeOutProgress = 0;
+  let isFadingOut = false;
+  let pauseBetweenHeartbeats = 500; // ms to pause between heartbeats
   let lastHeartbeatFinishTime = 0;
   
   // Animation function for sequential heartlines
@@ -225,63 +278,63 @@
     }
     
     // If we've completed all heartbeats, reset and start over
-    if (currentHeartbeatIndex >= heartlinePaths.length) {
+    if (currentHeartbeatIndex >= heartbeats.length) {
       currentHeartbeatIndex = 0;
       heartbeatProgress = 0;
+      fadeOutProgress = 0;
+      isFadingOut = false;
       lastHeartbeatFinishTime = 0;
-      
-      // Reset all paths to hidden
-      heartlinePaths.forEach(item => {
-        if (item.path) {
-          item.path.style.strokeDashoffset = item.length.toString();
-        }
-      });
       
       animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
       return;
     }
     
-    // Get the current heartbeat path to animate
-    const currentPath = heartlinePaths[currentHeartbeatIndex];
+    // Log current heartbeat data
+    if (heartbeats.length > 0 && currentHeartbeatIndex < heartbeats.length) {
+      const currentHeatwave = heartbeats[currentHeartbeatIndex].heatwaveData;
+      if (currentHeatwave && heartbeatProgress === 0 && !isFadingOut) {
+        console.log(`Showing heartbeat ${currentHeartbeatIndex + 1}/${heartbeats.length}:`, {
+          startDate: currentHeatwave.startDate,
+          endDate: currentHeatwave.endDate,
+          highestTemp: currentHeatwave.highestTemp,
+          rHeight: heartbeats[currentHeartbeatIndex].rHeight
+        });
+      }
+    }
     
-    if (currentPath && currentPath.path) {
+    // First draw the heartbeat, then fade it out
+    if (!isFadingOut) {
+      // Drawing phase
       if (heartbeatProgress < 1) {
-        // Animate the current heartbeat
-        heartbeatProgress += 0.01; // Speed of individual heartbeat drawing
-        currentPath.path.style.strokeDashoffset = ((1 - heartbeatProgress) * currentPath.length).toString();
+        // Gradually increase progress
+        heartbeatProgress += 0.02; // Speed of individual heartbeat drawing
         animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
       } else {
-        // Current heartbeat animation complete, move to next
-        lastHeartbeatFinishTime = now;
-        currentHeartbeatIndex++;
-        heartbeatProgress = 0;
+        // Drawing complete, now start fading out
+        isFadingOut = true;
         animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
       }
     } else {
-      // Skip any invalid paths
-      currentHeartbeatIndex++;
-      animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
+      // Fading out phase
+      if (fadeOutProgress < 1) {
+        fadeOutProgress += 0.02; // Speed of fade out
+        animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
+      } else {
+        // Fade out complete, move to next heartbeat
+        lastHeartbeatFinishTime = now;
+        currentHeartbeatIndex++;
+        heartbeatProgress = 0;
+        fadeOutProgress = 0;
+        isFadingOut = false;
+        animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
+      }
     }
   }
   
   // Setup animation after paths are rendered
   async function setupAnimation() {
-    // Get all path elements
-    const pathElements = document.querySelectorAll('.heartline-path');
-    
-    // Set up each path for animation
-    heartlinePaths = Array.from(pathElements).map(element => {
-      const path = element as SVGPathElement;
-      const length = path.getTotalLength();
-      path.style.strokeDasharray = length.toString();
-      path.style.strokeDashoffset = length.toString();
-      return { path, length };
-    });
-    
     // Start animation
-    if (heartlinePaths.length > 0) {
-      animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
-    }
+    animationFrame = requestAnimationFrame(animateHeartlinesSequentially);
   }
 
   // Initialize component
@@ -324,7 +377,7 @@
       </div>
     {/if}
     
-    <svg width={width} height={height}>
+    <svg width={width} height={height} viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">
       <!-- Black background -->
       <rect width="100%" height="100%" fill="black" />
       
@@ -350,21 +403,36 @@
         />
       {/each}
       
-      <!-- Multiple heartlines stacked on top of each other -->
-      {#each heartbeats as heartbeat, i}
+      <!-- Single heartbeat that will change through animation -->
+      {#if heartbeats.length > 0 && currentHeartbeatIndex < heartbeats.length}
         <g class="heartbeat-group">
+          <!-- Debug visualization of the R peak height -->
+          <line 
+            x1="0" 
+            y1={baselineY - heartbeats[currentHeartbeatIndex].rHeight} 
+            x2="20" 
+            y2={baselineY - heartbeats[currentHeartbeatIndex].rHeight} 
+            stroke="yellow" 
+            stroke-width="1" 
+            opacity="0.5"
+          />
+          
           <path 
-            d={generateHeartlinePath(heartbeat)} 
-            stroke={heartbeat.color} 
+            d={generateHeartlinePath(heartbeats[currentHeartbeatIndex])} 
+            stroke={heartbeats[currentHeartbeatIndex].color} 
             stroke-width="2"
             fill="none"
-            opacity={heartbeat.opacity}
+            opacity={isFadingOut ? 
+              heartbeats[currentHeartbeatIndex].opacity * (1 - fadeOutProgress) : 
+              heartbeats[currentHeartbeatIndex].opacity * Math.min(heartbeatProgress * 2, 1)}
             class="heartline-path"
+            style="stroke-dasharray: {heartbeatProgress < 1 ? '1000' : '0'}; 
+                   stroke-dashoffset: {heartbeatProgress < 1 ? (1000 * (1 - heartbeatProgress)) : '0'}"
           />
           
           <!-- Text labels removed as requested -->
         </g>
-      {/each}
+      {/if}
     </svg>
     
     <div class="legend">
@@ -403,12 +471,16 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    margin: 0 auto; /* Center horizontally */
+    max-width: 1200px; /* Limit maximum width */
   }
   
   svg {
     width: 100%;
     max-width: 1000px;
     height: 70vh;
+    margin: 0 auto; /* Center horizontally */
+    display: block; /* Needed for margin auto to work */
   }
   
   .heartline-path {
