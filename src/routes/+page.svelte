@@ -1,13 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte"
-  import * as d3 from "d3"
 
   // Audio for heartbeat sound
   let heartbeatSound: HTMLAudioElement
   let isPlaying = false
-  
-  // Reference to mini graph container for D3
-  let miniGraphContainer: HTMLElement
 
   // Heartbeat parameters
   const width = 800
@@ -65,7 +61,7 @@
     const r = 255 - Math.floor(35 * normalizedTemp) // Slightly decrease red for deeper reds
     const g = Math.floor(140 * (1 - normalizedTemp)) // Decrease green as temp increases
     const b = Math.floor(30 * (1 - normalizedTemp)) // Very low blue component
-    
+
     // Add brightness and saturation
     return `rgb(${r}, ${g}, ${b})`
   }
@@ -73,10 +69,7 @@
   // Format date to show month name without year (e.g., "June 15" instead of "2023-06-15")
   function formatDate(dateString: string): string {
     const date = new Date(dateString)
-    const monthNames = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ]
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     const month = monthNames[date.getMonth()]
     const day = date.getDate()
     return `${month} ${day}`
@@ -208,7 +201,7 @@
       tHeight: Math.random() * 20 + 10, // T wave: 10-30px
       color: getRandomColor(), // Random color
       opacity: Math.random() * 0.5 + 0.5, // Random opacity: 0.5-1.0
-      year: "unknown"
+      year: "unknown",
     }
   }
 
@@ -230,7 +223,7 @@
     const maxScale = 1.2
     const normalizedDuration = Math.min(Math.max(duration - minDuration, 0), maxDuration - minDuration) / (maxDuration - minDuration)
     const lengthScale = minScale + normalizedDuration * (maxScale - minScale)
-    
+
     // Center the heartbeat in the SVG
     const baseLineWidth = width * 0.8
     const lineWidth = baseLineWidth * lengthScale // Scale width based on duration
@@ -243,7 +236,7 @@
     const subtleNoise = () => (Math.random() - 0.5) * 0.15 + 1 // 0.925 to 1.075 multiplier for subtle variation
     const baselineNoise = () => (Math.random() - 0.5) * 1 // ±1px baseline drift
     const microNoise = () => (Math.random() - 0.5) * 0.5 // ±0.5px micro variations
-    
+
     // Apply subtle noise to all wave components
     const noisyPHeight = pHeight * subtleNoise()
     const noisyQDepth = qDepth * subtleNoise()
@@ -253,7 +246,7 @@
 
     // Add subtle horizontal timing variations
     const timingNoise = () => (Math.random() - 0.5) * 0.01 // ±1% timing variation
-    
+
     // Create baseline drift throughout the signal
     const baselineDrift1 = baselineNoise()
     const baselineDrift2 = baselineNoise()
@@ -284,7 +277,7 @@
       // QRS complex (sharp and realistic)
       // Q wave (small downward)
       `L ${startX + lineWidth * (0.37 + timingNoise())} ${baselineY + noisyQDepth + baselineDrift2 + microNoise()}`,
-      
+
       // R wave (sharp tall spike with slight asymmetry)
       `L ${startX + lineWidth * (0.395 + timingNoise())} ${baselineY - noisyRHeight * 0.9 + baselineDrift2 + microNoise()}`, // R wave rise
       `L ${startX + lineWidth * (0.4 + timingNoise())} ${baselineY - noisyRHeight + baselineDrift2 + microNoise()}`, // R peak
@@ -319,10 +312,22 @@
 
   // Animation variables
   let currentDate = new Date(1911, 0, 1) // Start at January 1911
-  let monthUpdateInterval = 20 // Update every 20ms for 5x faster progression
+  // Variable speed timeline - starts fast, ends slow
+  function getTimelineSpeed(): number {
+    const currentYear = currentDate.getFullYear()
+    const progress = (currentYear - startYear) / (endYear - startYear)
+
+    // Exponential slowdown: fast at start (5ms), slow at end (100ms)
+    const minSpeed = 5 // Fastest speed (early years)
+    const maxSpeed = 100 // Slowest speed (recent years)
+
+    // Use exponential curve for smooth transition
+    const speedFactor = Math.pow(progress, 2) // Square for stronger effect
+    return minSpeed + speedFactor * (maxSpeed - minSpeed)
+  }
   let lastMonthUpdateTime = 0
   let animationFrame: number | null = null
-  
+
   // Current heartbeat state
   let activeHeartbeat: HeartbeatParams | null = null
   let lastHeatwaveInfo: HeartbeatParams | null = null
@@ -330,88 +335,181 @@
   let fadeOutProgress = 0
   let isFadingOut = false
   let isShowingHeartbeat = false
-  
+
   // Store displayed heartbeats for mini graph
   let displayedHeartbeats: { year: string; temp: number; date: string }[] = []
 
-  // Fixed x-axis range
-  const startYear = 1911 // First year in dataset
-  const endYear = 2050 // End year for projection
+  // New timeline system - persistent year objects that animate position only
+  let yearObjects: { year: number; x: number; size: number; opacity: number; showAsDecade?: boolean }[] = []
 
-  // D3 scale for mapping dates to x positions (with padding for labels)
-  const timeScale = d3.scaleTime()
-    .domain([new Date(startYear, 0, 1), new Date(endYear, 0, 1)])
-    .range([40, 760])
+  const startYear = 1910
+  const endYear = 2050
+  const timelineMargin = 40
+  const timelineWidth = width - timelineMargin * 2
 
-  // Function to calculate x position based on date using D3
-  function calculateXPosition(dateStr: string): number {
-    try {
-      // Parse the date string (format: YYYY-MM-DD)
-      const parts = dateStr.split("-")
-      if (parts.length !== 3) {
-        console.warn(`Invalid date format: ${dateStr}, expected YYYY-MM-DD`)
-        return 0
-      }
 
-      // Extract year, month, day
-      const year = parseInt(parts[0])
-      const month = parseInt(parts[1]) - 1 // 0-indexed months
-      const day = parseInt(parts[2])
+  // Calculate static decade position with even spacing (1910-2050)
+  function calculateDecadePosition(decade: number): { x: number; size: number; opacity: number } {
+    const decadesFromStart = (decade - startYear) / 10
+    const totalDecades = (endYear - startYear) / 10 - 1 // 14 decades, but 13 intervals
+    
+    // Even spacing across the timeline
+    const x = timelineMargin + (decadesFromStart / totalDecades) * timelineWidth
+    
+    // All decades same small size
+    const size = 12 // Small consistent size for all decades
+    
+    // All decades have same opacity
+    const opacity = 0.8
+    
+    return { x, size, opacity }
+  }
+  
+  // Calculate current date position on timeline
+  function calculateCurrentDatePosition(): number {
+    const currentYear = currentDate.getFullYear()
+    const currentMonth = currentDate.getMonth() // 0-11
+    
+    // Find the decade before and after current year
+    const currentDecade = Math.floor(currentYear / 10) * 10
+    const nextDecade = currentDecade + 10
+    
+    // Get positions of surrounding decades
+    const currentDecadePos = calculateDecadePosition(currentDecade)
+    const nextDecadePos = calculateDecadePosition(nextDecade)
+    
+    // Calculate progress within the decade (0-10 years)
+    const yearInDecade = currentYear - currentDecade
+    const monthProgress = currentMonth / 12 // 0-1 for the current year
+    const decadeProgress = (yearInDecade + monthProgress) / 10 // 0-1 across the decade
+    
+    // Interpolate position between decades
+    const x = currentDecadePos.x + decadeProgress * (nextDecadePos.x - currentDecadePos.x)
+    
+    return x
+  }
+  
+  // Legacy function for compatibility with heatwave positioning
+  function calculateYearPosition(year: number): { x: number; size: number; opacity: number; showAsDecade?: boolean } {
+    const yearsFromStart = year - startYear
+    const totalYears = endYear - startYear // 2025 - 1911 = 114 years
 
-      // Validate year
-      if (isNaN(year)) {
-        console.warn(`Invalid year: ${year}`)
-        return 0
-      }
-      
-      // Create a date object and clamp it to the valid range
-      const date = new Date(year, month, day)
-      const clampedDate = new Date(
-        Math.max(startYear, Math.min(endYear, year)),
-        month,
-        day
-      )
-      
-      // Use D3 scale to map the date to an x position
-      return Math.max(1, Math.min(799, timeScale(clampedDate)))
-    } catch (error) {
-      console.error(`Error calculating position for date: ${dateStr}`, error)
-      return 0
+    // Calculate how "recent" this year is (0 = oldest, 1 = newest)
+    const recencyRatio = yearsFromStart / totalYears
+
+    // Position calculation with compression effect:
+    // Recent years (right side) are spread out, older years (left side) are compressed
+    let x
+    if (recencyRatio < 0.6) {
+      // Heavily compressed older years (left 40% of timeline)
+      // Use quadratic compression to pack older years tightly
+      const compressedPosition = Math.pow(recencyRatio / 0.6, 0.5)
+      x = timelineMargin + compressedPosition * (timelineWidth * 0.4)
+    } else {
+      // More spread out recent years (right 60% of timeline)
+      const recentPosition = (recencyRatio - 0.6) / 0.4
+      x = timelineMargin + timelineWidth * 0.4 + recentPosition * (timelineWidth * 0.6)
     }
+
+    // Size calculation - left (older) years smaller, right (newer) years bigger
+    const baseSizeMin = 6 // Very small for old years
+    const baseSizeMax = 22 // Large for recent years
+    
+    // Size increases with recency: older = smaller, newer = bigger
+    const sizeRatio = Math.pow(recencyRatio, 0.7) // Makes older years much smaller
+    const size = baseSizeMin + sizeRatio * (baseSizeMax - baseSizeMin)
+
+    // Opacity calculation - older years dimmer, newer years brighter
+    const baseOpacityMin = 0.3
+    const baseOpacityMax = 0.9
+    const opacity = baseOpacityMin + recencyRatio * (baseOpacityMax - baseOpacityMin)
+
+    // Determine if this year should show as decade (for very compressed/crowded areas)
+    // Show decades for older years to reduce crowding
+    const showAsDecade = recencyRatio < 0.4 && year % 10 !== 0
+
+    // For compatibility - use decade positioning
+    const decade = Math.floor(year / 10) * 10
+    const decadePos = calculateDecadePosition(decade)
+    return { ...decadePos, showAsDecade: false }
+  }
+
+
+  // Initialize static timeline with decades only (1910-2050)
+  function initializeTimeline() {
+    yearObjects = []
+    
+    // Create only decades from 1910 to 2050
+    for (let decade = startYear; decade <= endYear; decade += 10) {
+      const position = calculateDecadePosition(decade)
+      
+      yearObjects.push({
+        year: decade,
+        x: position.x,
+        size: position.size,
+        opacity: position.opacity,
+        showAsDecade: false // Will show as "1910", "1920", etc.
+      })
+    }
+    
+    console.log(`Created ${yearObjects.length} decades (${startYear}-${endYear})`)
+  }
+
+  // Calculate timeline position for heatwave points (works for any year)
+  function calculateTimelineXPosition(eventYear: number): number {
+    // Find the decade before and after the event year
+    const currentDecade = Math.floor(eventYear / 10) * 10
+    const nextDecade = currentDecade + 10
+    
+    // Get positions of surrounding decades
+    const currentDecadePos = calculateDecadePosition(currentDecade)
+    const nextDecadePos = calculateDecadePosition(nextDecade)
+    
+    // Calculate progress within the decade (0-10 years)
+    const yearInDecade = eventYear - currentDecade
+    const decadeProgress = yearInDecade / 10 // 0-1 across the decade
+    
+    // Interpolate position between decades
+    const x = currentDecadePos.x + decadeProgress * (nextDecadePos.x - currentDecadePos.x)
+    
+    return x
   }
 
   // Main animation loop - handles both time progression and heartbeat animation
   function mainAnimationLoop(): void {
     const now = performance.now()
-    
+
     if (!hasStarted) return
-    
+
     // Initialize timing
     if (lastMonthUpdateTime === 0) {
       lastMonthUpdateTime = now
     }
-    
-    // Update time progression
-    if (now - lastMonthUpdateTime >= monthUpdateInterval) {
+
+    // Update time progression with variable speed
+    const currentSpeed = getTimelineSpeed()
+    if (now - lastMonthUpdateTime >= currentSpeed) {
       // Advance one month - create new Date object for reactivity
       const newDate = new Date(currentDate)
       newDate.setMonth(newDate.getMonth() + 1)
       currentDate = newDate
       lastMonthUpdateTime = now
-      
-      console.log(`Current date: ${currentDate.toLocaleDateString()}`)
-      
+
+      // Timeline is static - no dynamic updates needed
+
       // Check if we've reached 2050
       if (currentDate.getFullYear() >= 2050 && currentDate.getMonth() >= 11) {
         console.log("Reached December 2050 - stopping")
         hasStarted = false
         return
       }
-      
+
       // Check for heatwave events at current date
       checkForHeatwaveAtCurrentDate()
     }
-    
+
+    // Timeline is static - no animation needed
+
     // Handle heartbeat animation if active
     if (isShowingHeartbeat && activeHeartbeat) {
       if (!isFadingOut) {
@@ -435,27 +533,25 @@
         }
       }
     }
-    
+
     // Continue animation loop
     if (hasStarted) {
       animationFrame = requestAnimationFrame(mainAnimationLoop)
     }
   }
-  
+
   // Check for heatwave events at current date and trigger heartbeat
   function checkForHeatwaveAtCurrentDate(): void {
     if (!heartbeats.length) return
-    
-    const currentYearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
-    
+
+    const currentYearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`
+
     // Find matching heatwave
-    const matchingHeartbeat = heartbeats.find(hb => 
-      hb.heatwaveData && hb.heatwaveData.startDate.startsWith(currentYearMonth)
-    )
-    
+    const matchingHeartbeat = heartbeats.find((hb) => hb.heatwaveData && hb.heatwaveData.startDate.startsWith(currentYearMonth))
+
     if (matchingHeartbeat) {
       console.log(`Found heatwave for ${currentYearMonth}:`, matchingHeartbeat.heatwaveData)
-      
+
       // Trigger heartbeat
       activeHeartbeat = matchingHeartbeat
       lastHeatwaveInfo = matchingHeartbeat // Store for persistent display
@@ -463,7 +559,7 @@
       heartbeatProgress = 0
       fadeOutProgress = 0
       isFadingOut = false
-      
+
       // Add to displayed heartbeats for timeline
       if (matchingHeartbeat.heatwaveData) {
         displayedHeartbeats = [
@@ -475,15 +571,11 @@
           },
         ]
       }
-      
-      // Update timeline visualization
-      updateD3Timeline()
-      
+
       // Play sound
       playHeartbeatSound()
     }
   }
-  
 
   // Play heartbeat sound
   function playHeartbeatSound() {
@@ -503,12 +595,12 @@
     if (hasStarted) return // Prevent multiple starts
 
     hasStarted = true
-    
+
     // Reset all animation variables
     currentDate = new Date(1911, 0, 1)
     lastMonthUpdateTime = 0
     displayedHeartbeats = []
-    
+
     // Reset heartbeat state
     activeHeartbeat = null
     lastHeatwaveInfo = null
@@ -516,7 +608,10 @@
     heartbeatProgress = 0
     fadeOutProgress = 0
     isFadingOut = false
-    
+
+    // Initialize timeline with years
+    initializeTimeline()
+
     // Initialize audio if not already done
     if (!heartbeatSound) {
       heartbeatSound = new Audio("/heartbeat-loop-96879 (1).mp3")
@@ -528,7 +623,7 @@
       cancelAnimationFrame(animationFrame)
       animationFrame = null
     }
-    
+
     // Start main animation loop
     console.log("Starting visualization")
     animationFrame = requestAnimationFrame(mainAnimationLoop)
@@ -540,137 +635,6 @@
   async function setupAnimation() {
     // Don't automatically start animation - wait for play button
     console.log("Animation ready - waiting for play button")
-    
-    // Initialize D3 timeline
-    initD3Timeline()
-  }
-  
-  // Initialize D3 timeline
-  function initD3Timeline() {
-    if (!miniGraphContainer) return
-    
-    // Clear any existing content
-    d3.select(miniGraphContainer).selectAll("*").remove()
-    
-    // Create SVG container
-    const svg = d3.select(miniGraphContainer)
-      .append("svg")
-      .attr("width", 800)
-      .attr("height", 60)
-      .attr("viewBox", "0 0 800 60")
-      .style("display", "block")
-      .style("margin", "0 auto")
-    
-    // Add background
-    svg.append("rect")
-      .attr("x", 0)
-      .attr("y", 0)
-      .attr("width", 800)
-      .attr("height", 60)
-      .attr("fill", "rgba(0,0,0,0.3)")
-    
-    // Add border to clearly define timeline boundaries
-    svg.append("rect")
-      .attr("x", 0)
-      .attr("y", 0)
-      .attr("width", 800)
-      .attr("height", 60)
-      .attr("fill", "none")
-      .attr("stroke", "rgba(255,255,255,0.2)")
-      .attr("stroke-width", 1)
-    
-    // Create time axis
-    const xAxis = d3.axisBottom(timeScale)
-      .tickFormat(d3.timeFormat("%Y"))
-      .ticks(10)
-    
-    // Add dashed center line
-    svg.append("line")
-      .attr("x1", 40)
-      .attr("y1", 30)
-      .attr("x2", 760)
-      .attr("y2", 30)
-      .attr("stroke", "rgba(0,255,0,0.5)")
-      .attr("stroke-width", 1)
-      .attr("stroke-dasharray", "4 2")
-    
-    // Add axis with custom styling
-    svg.append("g")
-      .attr("transform", "translate(0, 30)")
-      .call(xAxis)
-      .selectAll("text")
-      .attr("fill", "rgba(0,255,0,0.9)")
-      .attr("font-size", 12)
-      .attr("font-family", "Courier New, monospace")
-      .attr("text-anchor", "middle")
-      .attr("dy", 20)
-    
-    // Style the axis
-    svg.selectAll(".domain").remove() // Remove the axis line
-    svg.selectAll(".tick line")
-      .attr("stroke", "rgba(0,255,0,0.4)")
-      .attr("y1", -5)
-      .attr("y2", 5)
-    
-    // Create a group for the mini graph points
-    svg.append("g")
-      .attr("class", "mini-graph-points")
-  }
-  
-  // Update D3 timeline with enhanced circles focusing on latest
-  function updateD3Timeline() {
-    if (!miniGraphContainer) return
-    
-    const svg = d3.select(miniGraphContainer).select("svg")
-    
-    // Log the number of displayed heartbeats for debugging
-    console.log(`Updating D3 timeline with ${displayedHeartbeats.length} heartbeats`)
-    
-    // Enhanced mini graph circles with focus on latest
-    const points = svg.select(".mini-graph-points")
-      .selectAll("circle")
-      .data(displayedHeartbeats, (d: any, i: any) => `${d.date}-${i}`) // Use a key function to better track data points
-    
-    // Remove old points
-    points.exit().remove()
-    
-    // Add new points with enhanced styling
-    points.enter()
-      .append("circle")
-      .merge(points)
-      .attr("cx", (d: any) => {
-        try {
-          return timeScale(new Date(d.date.split("-")[0], d.date.split("-")[1] - 1, d.date.split("-")[2]))
-        } catch (e) {
-          console.error("Error calculating circle position:", e, d)
-          return 0
-        }
-      })
-      .attr("cy", 30)
-      .attr("r", (d: any, i: any) => {
-        const isLatest = i === displayedHeartbeats.length - 1
-        return isLatest ? 6 : 4 // Latest circle is larger
-      })
-      .attr("fill", (d: any, i: any) => {
-        const isLatest = i === displayedHeartbeats.length - 1
-        return isLatest ? "rgba(255,100,100,1)" : "rgba(255,50,50,1)"
-      })
-      .attr("opacity", (d: any, i: any) => {
-        const isLatest = i === displayedHeartbeats.length - 1
-        return isLatest ? 1.0 : 0.7 // Latest is fully visible, others are clearly visible
-      })
-      .attr("stroke", (d: any, i: any) => {
-        const isLatest = i === displayedHeartbeats.length - 1
-        return isLatest ? "rgba(255,255,255,0.8)" : "none"
-      })
-      .attr("stroke-width", (d: any, i: any) => {
-        const isLatest = i === displayedHeartbeats.length - 1
-        return isLatest ? 1 : 0
-      })
-      .attr("filter", (d: any, i: any) => {
-        const isLatest = i === displayedHeartbeats.length - 1
-        return isLatest ? "drop-shadow(0 0 6px rgba(255,100,100,0.6))" : "none"
-      })
   }
 
   // Initialize component
@@ -707,7 +671,6 @@
 
 <main>
   <div class="container">
-
     {#if isLoading}
       <div class="loading">
         <p>Loading heatwave data...</p>
@@ -722,17 +685,23 @@
     <!-- Title and Introduction -->
     <div class="visualization-header">
       <h1 class="main-title">Climate Heartbeat Monitor</h1>
-      <p class="intro-text">Each heartbeat represents a <span class="heatwave-highlight">heatwave</span> event. Watch as climate patterns pulse through time, revealing the rhythm of our changing planet. <span class="data-source">Data: <a href="https://raw.githubusercontent.com/sophievanderhorst/data/refs/heads/main/heatwaves.csv" target="_blank">Heatwave Dataset</a></span></p>
+      <p class="intro-text">
+        Each heartbeat represents a <span class="heatwave-highlight">heatwave</span> event. Watch as climate patterns pulse through time, revealing
+        the rhythm of our changing planet.
+        <span class="data-source"
+          >Data: <a href="https://raw.githubusercontent.com/sophievanderhorst/data/refs/heads/main/heatwaves.csv" target="_blank">Heatwave Dataset</a
+          ></span
+        >
+      </p>
     </div>
 
     <!-- Medical Monitor Style Information Display - Always show the date -->
     <div class="monitor-info">
-      <!-- Year and Historic/Future title above - show only year -->
+      <!-- Historic/Future status only -->
       <div class="monitor-header">
-        <div class="year-display">{currentDate.getFullYear()}</div>
         <div class="time-direction">{currentDate.getFullYear() > 2023 ? "PROJECTED" : "HISTORIC"}</div>
       </div>
-      
+
       <!-- Show last heatwave information (persists until next heatwave) -->
       {#if lastHeatwaveInfo && lastHeatwaveInfo.heatwaveData}
         <div class="monitor-data">
@@ -762,7 +731,7 @@
     <svg {width} {height} viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">
       <!-- Black background -->
       <rect width="100%" height="100%" fill="black" />
-      
+
       <!-- Monitor-style border -->
       <rect x="2" y="2" width={width - 4} height={height - 4} fill="none" stroke="rgba(0, 255, 0, 0.3)" stroke-width="2" rx="8" />
 
@@ -773,7 +742,7 @@
       {#each Array(80) as _, i}
         <line x1={i * (width / 80)} y1="0" x2={i * (width / 80)} y2={height} stroke="rgba(0, 100, 0, 0.08)" stroke-width="0.5" />
       {/each}
-      
+
       <!-- ECG grid pattern - major grid lines -->
       {#each Array(12) as _, i}
         <line x1="0" y1={i * (height / 12)} x2={width} y2={i * (height / 12)} stroke="rgba(0, 150, 0, 0.2)" stroke-width="1" />
@@ -781,39 +750,134 @@
       {#each Array(16) as _, i}
         <line x1={i * (width / 16)} y1="0" x2={i * (width / 16)} y2={height} stroke="rgba(0, 150, 0, 0.2)" stroke-width="1" />
       {/each}
-      
-      <!-- Prominent baseline -->
-      <line x1="0" y1={baselineY} x2={width} y2={baselineY} stroke="rgba(0, 255, 0, 0.4)" stroke-width="1.5" stroke-dasharray="5,5" />
-      
+
+      <!-- Dynamic timeline baseline (expands as time progresses) -->
+      {#if hasStarted}
+        <!-- Timeline baseline spans full width from 1911 to current year -->
+        <line x1="40" y1={baselineY} x2={width - 40} y2={baselineY} stroke="rgba(0, 255, 0, 0.6)" stroke-width="2" class="timeline-baseline" />
+
+        <!-- Center line - where years shrink -->
+        <line
+          x1={width / 2}
+          y1={baselineY - 40}
+          x2={width / 2}
+          y2={baselineY + 40}
+          stroke="rgba(255, 255, 255, 0.3)"
+          stroke-width="1"
+          stroke-dasharray="3,3"
+          class="center-line"
+        />
+
+        <!-- Timeline years with compression effect -->
+        {#each yearObjects as yearData}
+          {@const isFirst = yearData.year === startYear}
+          {@const isDecade = yearData.showAsDecade}
+
+            <text
+              x={yearData.x}
+              y={baselineY + 15}
+              text-anchor="middle"
+              fill="rgba(0, 255, 0, {yearData.opacity})"
+              font-size={yearData.size}
+              font-weight={isFirst ? "bold" : "normal"}
+              font-family="Courier New, monospace"
+              class="timeline-year {isFirst ? 'first-year' : ''} {isDecade ? 'decade-year' : ''}"
+            >
+              {isDecade ? `${yearData.year}s` : yearData.year}
+            </text>
+
+        {/each}
+
+        <!-- Current date indicator that moves along timeline -->
+        {#if hasStarted}
+          {@const currentDateX = calculateCurrentDatePosition()}
+          
+          <!-- Current date line -->
+          <line
+            x1={currentDateX}
+            y1={baselineY - 10}
+            x2={currentDateX}
+            y2={baselineY + 35}
+            stroke="rgba(255, 50, 50, 0.8)"
+            stroke-width="2"
+            class="current-date-line"
+          />
+          
+          <!-- Current date text -->
+          <text
+            x={currentDateX}
+            y={baselineY + 45}
+            text-anchor="middle"
+            fill="rgba(255, 50, 50, 1)"
+            font-size="16"
+            font-weight="bold"
+            font-family="Courier New, monospace"
+            class="current-date-text"
+          >
+            {currentDate.getFullYear()}
+          </text>
+        {/if}
+        
+        <!-- Timeline points for heatwave events -->
+        {#each displayedHeartbeats as heartbeat, i}
+          {#if parseInt(heartbeat.year) <= currentDate.getFullYear()}
+            <circle
+              cx={calculateTimelineXPosition(parseInt(heartbeat.year))}
+              cy={baselineY}
+              r={i === displayedHeartbeats.length - 1 ? 4 : 3}
+              fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)"}
+              stroke={i === displayedHeartbeats.length - 1 ? "rgba(255,255,255,0.8)" : "none"}
+              stroke-width={i === displayedHeartbeats.length - 1 ? 1 : 0}
+              opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.7}
+              class="timeline-point"
+            />
+          {/if}
+        {/each}
+
+        <!-- Current year indicator (at the right end) -->
+        <circle
+          cx={width - 40}
+          cy={baselineY}
+          r="3"
+          fill="rgba(0, 255, 0, 0.9)"
+          stroke="rgba(255, 255, 255, 0.6)"
+          stroke-width="1"
+          class="current-year-indicator"
+        />
+      {:else}
+        <!-- Static baseline when not started -->
+        <line x1="0" y1={baselineY} x2={width} y2={baselineY} stroke="rgba(0, 255, 0, 0.4)" stroke-width="1.5" stroke-dasharray="5,5" />
+      {/if}
+
       <!-- Monitor-style corner indicators -->
       <circle cx="20" cy="20" r="3" fill="rgba(0, 255, 0, 0.6)" />
       <circle cx={width - 20} cy="20" r="3" fill="rgba(0, 255, 0, 0.6)" />
       <circle cx="20" cy={height - 20} r="3" fill="rgba(0, 255, 0, 0.6)" />
       <circle cx={width - 20} cy={height - 20} r="3" fill="rgba(0, 255, 0, 0.6)" />
-      
+
       <!-- Arrow Play Button (only show if not started) -->
       {#if !hasStarted}
-        <g 
-          class="play-button-svg" 
-          on:click={startVisualization} 
-          on:keydown={(e) => e.key === 'Enter' || e.key === ' ' ? startVisualization() : null}
+        <g
+          class="play-button-svg"
+          on:click={startVisualization}
+          on:keydown={(e) => (e.key === "Enter" || e.key === " " ? startVisualization() : null)}
           role="button"
           tabindex="0"
           aria-label="Start climate heartbeat visualization"
           style="cursor: pointer;"
         >
           <!-- Semi-transparent background circle -->
-          <circle 
-            cx={width / 2} 
-            cy={height / 2} 
-            r="40" 
-            fill="rgba(0, 0, 0, 0.7)" 
-            stroke="rgba(0, 255, 0, 0.8)" 
+          <circle
+            cx={width / 2}
+            cy={height / 2}
+            r="40"
+            fill="rgba(0, 0, 0, 0.7)"
+            stroke="rgba(0, 255, 0, 0.8)"
             stroke-width="2"
             class="play-bg-circle"
           />
           <!-- Play arrow triangle -->
-          <polygon 
+          <polygon
             points="{width / 2 - 12},{height / 2 - 15} {width / 2 - 12},{height / 2 + 15} {width / 2 + 18},{height / 2}"
             fill="rgba(0, 255, 0, 0.9)"
             class="play-arrow"
@@ -832,9 +896,7 @@
               stroke={activeHeartbeat.color}
               stroke-width="6"
               fill="none"
-              opacity={isFadingOut
-                ? activeHeartbeat.opacity * (1 - fadeOutProgress) * 0.3
-                : activeHeartbeat.opacity * 0.3}
+              opacity={isFadingOut ? activeHeartbeat.opacity * (1 - fadeOutProgress) * 0.3 : activeHeartbeat.opacity * 0.3}
               pathLength="1000"
               style="stroke-dasharray: {heartbeatProgress < 1 ? `${1000 * heartbeatProgress} 1000` : '1000 0'}; 
                      stroke-dashoffset: 0;
@@ -846,9 +908,7 @@
               stroke={activeHeartbeat.color}
               stroke-width="3"
               fill="none"
-              opacity={isFadingOut
-                ? activeHeartbeat.opacity * (1 - fadeOutProgress)
-                : activeHeartbeat.opacity}
+              opacity={isFadingOut ? activeHeartbeat.opacity * (1 - fadeOutProgress) : activeHeartbeat.opacity}
               class="heartline-path"
               pathLength="1000"
               style="stroke-dasharray: {heartbeatProgress < 1 ? `${1000 * heartbeatProgress} 1000` : '1000 0'}; 
@@ -861,19 +921,11 @@
       {:else if hasStarted}
         <!-- Show flatline when no heatwave is present -->
         <g class="flatline-group">
-          <line 
-            x1="0" 
-            y1={baselineY} 
-            x2={width} 
-            y2={baselineY} 
-            stroke="rgba(0, 255, 0, 0.7)" 
-            stroke-width="2" 
-            class="flatline"
-          />
-          
+          <line x1="0" y1={baselineY} x2={width} y2={baselineY} stroke="rgba(0, 255, 0, 0.7)" stroke-width="2" class="flatline" />
+
           <!-- Small blip that moves along the flatline to show activity -->
           <circle
-            cx={(width * 0.2) + Math.sin(performance.now() / 1000) * (width * 0.6)}
+            cx={width * 0.2 + Math.sin(performance.now() / 1000) * (width * 0.6)}
             cy={baselineY}
             r="2"
             fill="rgba(0, 255, 0, 0.8)"
@@ -882,11 +934,6 @@
         </g>
       {/if}
     </svg>
-
-    <!-- Mini circle graph with D3.js timeline from 1911 to 2050 -->
-    <div class="mini-graph-container" bind:this={miniGraphContainer}>
-      <!-- D3 will render the timeline here -->
-    </div>
   </div>
 </main>
 
@@ -943,48 +990,22 @@
     z-index: 10;
   }
 
-
-  .legend {
-    position: absolute;
-    bottom: 20px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    background-color: rgba(0, 10, 0, 0.85);
-    padding: 15px 20px;
-    border-top: 2px solid rgba(0, 255, 0, 0.4);
-    backdrop-filter: blur(3px);
+  .data-source {
+    font-size: 0.85rem;
+    color: rgba(150, 150, 150, 0.8);
+    font-style: italic;
   }
 
-  .legend h2 {
-    margin: 0 0 12px 0;
-    font-size: 1.3rem;
-    color: rgba(0, 255, 0, 0.9);
-    font-family: 'Courier New', monospace;
-    font-weight: bold;
-    text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
-    letter-spacing: 1px;
-  }
-
-  .legend p {
-    margin: 8px 0;
-    font-size: 0.95rem;
-    color: rgba(200, 200, 200, 0.9);
-    line-height: 1.4;
-  }
-
-  .legend a {
-    color: rgba(0, 255, 0, 0.8);
+  .data-source a {
+    color: rgba(0, 255, 0, 0.7);
     text-decoration: none;
-    font-weight: bold;
   }
 
-  .legend a:hover {
+  .data-source a:hover {
     color: rgba(0, 255, 0, 1);
     text-decoration: underline;
-    text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
   }
-  
+
   .heatwave-highlight {
     color: rgba(255, 50, 50, 1);
     font-weight: bold;
@@ -1012,42 +1033,29 @@
   .play-button-svg {
     transition: all 0.3s ease;
   }
-  
+
   .play-button-svg:hover .play-bg-circle {
     fill: rgba(0, 0, 0, 0.9);
     stroke: rgba(0, 255, 0, 1);
     stroke-width: 3;
   }
-  
+
   .play-button-svg:hover .play-arrow {
     fill: rgba(0, 255, 0, 1);
   }
-  
+
   .play-button-svg:active {
     transform: scale(0.95);
   }
-  
+
   .play-bg-circle {
     transition: all 0.2s ease;
   }
-  
+
   .play-arrow {
     transition: all 0.2s ease;
   }
 
-  .mini-graph-container {
-    position: absolute;
-    width: 100%;
-    max-width: 900px;
-    height: 80px;
-    bottom: 280px; /* Positioned higher, closer to heartbeat monitor */
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2;
-    overflow: hidden;
-  }
-
-  
   /* Pulse animation for current heartbeat point */
   @keyframes pulse {
     0% {
@@ -1063,7 +1071,7 @@
       opacity: 0.6;
     }
   }
-  
+
   /* Visualization Header */
   .visualization-header {
     text-align: center;
@@ -1071,23 +1079,23 @@
     max-width: 800px;
     padding: 0 20px;
   }
-  
+
   .main-title {
     font-size: 2.5rem;
     font-weight: bold;
     color: rgba(0, 255, 0, 1);
     text-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
     margin: 0 0 15px 0;
-    font-family: 'Courier New', monospace;
+    font-family: "Courier New", monospace;
     letter-spacing: 2px;
   }
-  
+
   .intro-text {
     font-size: 1.1rem;
     color: rgba(200, 200, 200, 0.9);
     line-height: 1.5; /* Slightly reduced line height */
     margin: 0 0 15px 0; /* Reduced bottom margin */
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   }
 
   /* Medical Monitor Information Display */
@@ -1098,13 +1106,13 @@
     border: 2px solid rgba(0, 255, 0, 0.6);
     border-radius: 8px;
     padding: 12px 20px; /* Reduced padding for more compact design */
-    font-family: 'Courier New', monospace;
+    font-family: "Courier New", monospace;
     text-align: center;
     box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
     backdrop-filter: blur(5px);
     max-width: 800px;
   }
-  
+
   .monitor-header {
     display: flex;
     flex-direction: column;
@@ -1112,7 +1120,7 @@
     margin-bottom: 12px;
     gap: 4px;
   }
-  
+
   .year-display {
     font-size: 28px;
     font-weight: bold;
@@ -1120,21 +1128,21 @@
     text-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
     letter-spacing: 2px;
   }
-  
+
   .month-display {
     font-size: 18px;
     color: rgba(0, 220, 0, 0.9);
     text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
     letter-spacing: 1px;
   }
-  
+
   .time-direction {
     font-size: 12px;
     color: rgba(0, 200, 0, 0.9);
     font-weight: bold;
     letter-spacing: 1px;
   }
-  
+
   .monitor-data {
     display: flex;
     align-items: center;
@@ -1142,35 +1150,34 @@
     gap: 15px;
     flex-wrap: wrap;
   }
-  
+
   .data-item {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
   }
-  
+
   .data-item .label {
     font-size: 10px;
     color: rgba(0, 180, 0, 0.8);
     font-weight: bold;
     letter-spacing: 0.5px;
   }
-  
+
   .data-item .value {
     font-size: 16px;
     color: rgba(255, 50, 50, 1);
     font-weight: bold;
     text-shadow: 0 0 4px rgba(255, 50, 50, 0.6);
   }
-  
+
   .data-separator {
     color: rgba(0, 150, 0, 0.6);
     font-size: 16px;
     font-weight: bold;
   }
-  
-  
+
   /* Flatline animation */
   @keyframes flatline-pulse {
     0% {
@@ -1186,11 +1193,11 @@
       stroke-width: 1.5;
     }
   }
-  
+
   .flatline {
     animation: flatline-pulse 2s infinite ease-in-out;
   }
-  
+
   @keyframes flatline-blip-pulse {
     0% {
       opacity: 0.7;
@@ -1205,44 +1212,148 @@
       r: 2;
     }
   }
-  
+
   .flatline-blip {
     animation: flatline-blip-pulse 1s infinite ease-in-out;
   }
+
+  /* Timeline animations */
+  .timeline-baseline {
+    transition: x2 0.1s ease-out;
+  }
+
+  .timeline-point {
+    transition: all 0.3s ease-in-out;
+  }
+
+  .current-year-indicator {
+    animation: current-year-pulse 2s infinite ease-in-out;
+    filter: drop-shadow(0 0 8px rgba(0, 255, 0, 0.8));
+  }
+
+  .moving-year {
+    transition: all 0.5s ease-out;
+    text-shadow: 0 0 3px rgba(0, 255, 0, 0.3);
+  }
+
+  .moving-year.current-year {
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.9);
+    animation: current-year-glow 2s infinite ease-in-out;
+  }
+
+  .moving-year.first-year {
+    text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
+    opacity: 0.8;
+  }
+
+  .moving-year.decade-year {
+    font-style: italic;
+    color: rgba(0, 200, 0, 0.7);
+  }
+
+  .current-year-glow {
+    animation: current-year-pulse-glow 2s infinite ease-in-out;
+  }
   
+  .current-date-line {
+    animation: date-line-glow 2s infinite ease-in-out;
+  }
+  
+  .current-date-text {
+    animation: date-text-glow 2s infinite ease-in-out;
+  }
+  
+  @keyframes date-line-glow {
+    0% { opacity: 0.6; }
+    50% { opacity: 1.0; }
+    100% { opacity: 0.6; }
+  }
+  
+  @keyframes date-text-glow {
+    0% { opacity: 0.8; }
+    50% { opacity: 1.0; }
+    100% { opacity: 0.8; }
+  }
+
+  @keyframes current-year-glow {
+    0% {
+      text-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+    }
+    50% {
+      text-shadow: 0 0 12px rgba(0, 255, 0, 1);
+    }
+    100% {
+      text-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+    }
+  }
+
+  .center-line {
+    opacity: 0.3;
+  }
+
+  @keyframes current-year-pulse {
+    0% {
+      opacity: 0.9;
+      r: 5;
+    }
+    50% {
+      opacity: 1;
+      r: 6;
+    }
+    100% {
+      opacity: 0.9;
+      r: 5;
+    }
+  }
+
+  @keyframes current-year-pulse-glow {
+    0% {
+      opacity: 0.3;
+      r: 4;
+    }
+    50% {
+      opacity: 0.6;
+      r: 8;
+    }
+    100% {
+      opacity: 0.3;
+      r: 4;
+    }
+  }
+
   /* Responsive adjustments */
   @media (max-width: 768px) {
     .main-title {
       font-size: 2rem;
       letter-spacing: 1px;
     }
-    
+
     .intro-text {
       font-size: 1rem;
       padding: 0 10px;
     }
-    
+
     .visualization-header {
       margin: 15px auto 20px auto;
     }
-    
+
     .monitor-info {
       padding: 10px 15px;
       margin: 5px auto 5px auto;
     }
-    
+
     .year-display {
       font-size: 22px;
     }
-    
+
     .month-display {
       font-size: 16px;
     }
-    
+
     .monitor-data {
       gap: 10px;
     }
-    
+
     .data-item .value {
       font-size: 14px;
     }
