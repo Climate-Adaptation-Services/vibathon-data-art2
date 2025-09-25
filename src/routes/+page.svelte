@@ -3,6 +3,7 @@
 
   // Audio for heartbeat sound
   let heartbeatSound: HTMLAudioElement
+  let beepSound: HTMLAudioElement
   let isPlaying = false
 
   // Heartbeat parameters
@@ -315,9 +316,10 @@
   let animationFrame: number | null = null
 
   // Current heartbeat state - now supports multiple concurrent heartbeats
-  let activeHeartbeats: Array<{id: number, params: HeartbeatParams, progress: number, fadeProgress: number, isFading: boolean}> = []
+  let activeHeartbeats: Array<{ id: number; params: HeartbeatParams; progress: number; fadeProgress: number; isFading: boolean }> = []
   let lastHeatwaveInfo: HeartbeatParams | null = null
   let heartbeatIdCounter = 0
+
 
   // Store displayed heartbeats for mini graph
   let displayedHeartbeats: { year: string; temp: number; date: string }[] = []
@@ -330,48 +332,47 @@
   const timelineMargin = 40
   const timelineWidth = width - timelineMargin * 2
 
-
   // Calculate static decade position with even spacing (1910-2050)
   function calculateDecadePosition(decade: number): { x: number; size: number; opacity: number } {
     const decadesFromStart = (decade - startYear) / 10
     const totalDecades = (endYear - startYear) / 10 // 14 decades total (1910, 1920, ..., 2050)
-    
+
     // Even spacing across the timeline
     const x = timelineMargin + (decadesFromStart / totalDecades) * timelineWidth
-    
+
     // All decades same small size
     const size = 12 // Small consistent size for all decades
-    
+
     // All decades have same opacity
     const opacity = 0.8
-    
+
     return { x, size, opacity }
   }
-  
+
   // Calculate current date position on timeline
   function calculateCurrentDatePosition(): number {
     const currentYear = currentDate.getFullYear()
     const currentMonth = currentDate.getMonth() // 0-11
-    
+
     // Find the decade before and after current year
     const currentDecade = Math.floor(currentYear / 10) * 10
     const nextDecade = currentDecade + 10
-    
+
     // Get positions of surrounding decades
     const currentDecadePos = calculateDecadePosition(currentDecade)
     const nextDecadePos = calculateDecadePosition(nextDecade)
-    
+
     // Calculate progress within the decade (0-10 years)
     const yearInDecade = currentYear - currentDecade
     const monthProgress = currentMonth / 12 // 0-1 for the current year
     const decadeProgress = (yearInDecade + monthProgress) / 10 // 0-1 across the decade
-    
+
     // Interpolate position between decades
     const x = currentDecadePos.x + decadeProgress * (nextDecadePos.x - currentDecadePos.x)
-    
+
     return x
   }
-  
+
   // Legacy function for compatibility with heatwave positioning
   function calculateYearPosition(year: number): { x: number; size: number; opacity: number; showAsDecade?: boolean } {
     const yearsFromStart = year - startYear
@@ -397,7 +398,7 @@
     // Size calculation - left (older) years smaller, right (newer) years bigger
     const baseSizeMin = 6 // Very small for old years
     const baseSizeMax = 22 // Large for recent years
-    
+
     // Size increases with recency: older = smaller, newer = bigger
     const sizeRatio = Math.pow(recencyRatio, 0.7) // Makes older years much smaller
     const size = baseSizeMin + sizeRatio * (baseSizeMax - baseSizeMin)
@@ -417,25 +418,24 @@
     return { ...decadePos, showAsDecade: false }
   }
 
-
   // Initialize static timeline with decades only (1910-2050)
   function initializeTimeline() {
     yearObjects = []
-    
+
     // Create only decades from 1910 to 2050
     for (let decade = startYear; decade <= endYear; decade += 10) {
       const position = calculateDecadePosition(decade)
       console.log(`Creating decade: ${decade}`)
-      
+
       yearObjects.push({
         year: decade,
         x: position.x,
         size: position.size,
         opacity: position.opacity,
-        showAsDecade: false // Will show as "1910", "1920", etc.
+        showAsDecade: false, // Will show as "1910", "1920", etc.
       })
     }
-    
+
     console.log(`Created ${yearObjects.length} decades (${startYear}-${endYear})`)
   }
 
@@ -506,27 +506,30 @@
 
     // Timeline is static - no animation needed
 
+
     // Handle multiple concurrent heartbeat animations
     if (activeHeartbeats.length > 0) {
-      activeHeartbeats = activeHeartbeats.map(heartbeat => {
-        if (!heartbeat.isFading) {
-          // Drawing phase
-          if (heartbeat.progress < 1) {
-            return { ...heartbeat, progress: heartbeat.progress + 0.01875 }
+      activeHeartbeats = activeHeartbeats
+        .map((heartbeat) => {
+          if (!heartbeat.isFading) {
+            // Drawing phase
+            if (heartbeat.progress < 1) {
+              return { ...heartbeat, progress: heartbeat.progress + 0.01875 }
+            } else {
+              // Start fading phase
+              return { ...heartbeat, isFading: true }
+            }
           } else {
-            // Start fading phase
-            return { ...heartbeat, isFading: true }
+            // Fading phase - fade out in place
+            if (heartbeat.fadeProgress < 1) {
+              return { ...heartbeat, fadeProgress: heartbeat.fadeProgress + 0.01125 }
+            } else {
+              // Mark for removal
+              return null
+            }
           }
-        } else {
-          // Fading phase - fade out in place
-          if (heartbeat.fadeProgress < 1) {
-            return { ...heartbeat, fadeProgress: heartbeat.fadeProgress + 0.01125 }
-          } else {
-            // Mark for removal
-            return null
-          }
-        }
-      }).filter(heartbeat => heartbeat !== null)
+        })
+        .filter((heartbeat) => heartbeat !== null)
     }
 
     // Continue animation loop
@@ -553,7 +556,7 @@
         params: matchingHeartbeat,
         progress: 0,
         fadeProgress: 0,
-        isFading: false
+        isFading: false,
       }
       activeHeartbeats = [...activeHeartbeats, newHeartbeat]
       lastHeatwaveInfo = matchingHeartbeat // Store for persistent display
@@ -575,17 +578,42 @@
     }
   }
 
-  // Play heartbeat sound
+  // Play heartbeat sound with beep
   function playHeartbeatSound() {
+    // Play the original heartbeat sound
     if (heartbeatSound) {
-      // Reset the sound to the beginning if it's already playing
       heartbeatSound.currentTime = 0
-
-      // Play the sound
       heartbeatSound.play().catch((error) => {
         console.error("Error playing heartbeat sound:", error)
       })
     }
+
+    // Play the beep sound for hospital monitor effect
+    playBeepSound()
+  }
+
+  // Generate and play a beep sound
+  function playBeepSound() {
+    // Create AudioContext for generating beep
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    // Connect oscillator to gain to speakers
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    // Set beep parameters
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime) // 800Hz beep
+    oscillator.type = "sine"
+
+    // Set volume and fade out
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1)
+
+    // Play beep for 100ms
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + 0.1)
   }
 
   // Start the visualization
@@ -603,6 +631,7 @@
     activeHeartbeats = []
     lastHeatwaveInfo = null
     heartbeatIdCounter = 0
+
 
     // Initialize timeline with years
     initializeTimeline()
@@ -679,7 +708,7 @@
 
     <!-- Title and Introduction -->
     <div class="visualization-header">
-      <h1 class="main-title">Climate Heartbeat Monitor</h1>
+      <h1 class="main-title"><span class="heatwave-highlight">Heatwave</span> Heartbeat Monitor</h1>
       <p class="intro-text">
         Each heartbeat represents a <span class="heatwave-highlight">heatwave</span> event. Watch as climate patterns pulse through time, revealing
         the rhythm of our changing planet.
@@ -692,7 +721,6 @@
 
     <!-- Medical Monitor Style Information Display - Always show the date -->
     <div class="monitor-info">
-
       <!-- Show last heatwave information (persists until next heatwave) -->
       {#if lastHeatwaveInfo && lastHeatwaveInfo.heatwaveData}
         <div class="monitor-data">
@@ -744,10 +772,11 @@
 
       <!-- Dynamic timeline baseline (expands as time progresses) -->
       {#if hasStarted}
-        <!-- Timeline baseline spans full width from 1911 to current year -->
-        <line x1="40" y1={baselineY} x2={width - 40} y2={baselineY} stroke="rgba(0, 255, 0, 0.6)" stroke-width="2" class="timeline-baseline" />
+        {@const bottomY = height - 80} <!-- Position for mini barchart and timeline - moved higher -->
+        <!-- Timeline baseline moved to bottom to overlap with mini barchart -->
+        <line x1="40" y1={bottomY} x2={width - 40} y2={bottomY} stroke="rgba(0, 255, 0, 0.6)" stroke-width="2" class="timeline-baseline" />
 
-        <!-- Center line - where years shrink -->
+        <!-- Center line - where years shrink (keep in middle for heartbeat area) -->
         <line
           x1={width / 2}
           y1={baselineY - 40}
@@ -764,40 +793,39 @@
           {@const isFirst = yearData.year === startYear}
           {@const isDecade = yearData.showAsDecade}
 
-            <text
-              x={yearData.x}
-              y={baselineY + 15}
-              text-anchor="middle"
-              fill="rgba(0, 255, 0, {yearData.opacity})"
-              font-size={yearData.size}
-              font-weight={isFirst ? "bold" : "normal"}
-              font-family="Courier New, monospace"
-              class="timeline-year {isFirst ? 'first-year' : ''} {isDecade ? 'decade-year' : ''}"
-            >
-              {isDecade ? `${yearData.year}s` : yearData.year}
-            </text>
-
+          <text
+            x={yearData.x}
+            y={bottomY + 15}
+            text-anchor="middle"
+            fill="rgba(0, 255, 0, {yearData.opacity})"
+            font-size={yearData.size}
+            font-weight={isFirst ? "bold" : "normal"}
+            font-family="Courier New, monospace"
+            class="timeline-year {isFirst ? 'first-year' : ''} {isDecade ? 'decade-year' : ''}"
+          >
+            {isDecade ? `${yearData.year}s` : yearData.year}
+          </text>
         {/each}
 
         <!-- Current date indicator that moves along timeline -->
         {#if hasStarted}
           {@const currentDateX = calculateCurrentDatePosition()}
-          
+
           <!-- Current date line -->
           <line
             x1={currentDateX}
-            y1={baselineY - 10}
+            y1={bottomY - 10}
             x2={currentDateX}
-            y2={baselineY + 35}
+            y2={bottomY + 35}
             stroke="rgba(255, 50, 50, 0.8)"
             stroke-width="2"
             class="current-date-line"
           />
-          
+
           <!-- Current date text -->
           <text
             x={currentDateX}
-            y={baselineY + 45}
+            y={bottomY + 45}
             text-anchor="middle"
             fill="rgba(255, 50, 50, 1)"
             font-size="16"
@@ -808,15 +836,15 @@
             {currentDate.getFullYear()}
           </text>
         {/if}
-        
-        <!-- Mini barchart for heatwave events -->
+
+        <!-- Mini barchart for heatwave events - overlapping with timeline at bottom -->
         {#each displayedHeartbeats as heartbeat, i}
           {#if parseInt(heartbeat.year) <= currentDate.getFullYear()}
             {@const barHeight = calculateBarHeight(heartbeat.temp)}
             {@const barX = calculateTimelineXPosition(parseInt(heartbeat.year))}
             <rect
               x={barX - 1.5}
-              y={baselineY - barHeight}
+              y={bottomY - barHeight}
               width="3"
               height={barHeight}
               fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)"}
@@ -825,10 +853,10 @@
               opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.7}
               class="timeline-bar"
             />
-            <!-- Optional: Add a small indicator at the base -->
+            <!-- Small indicator at the base -->
             <circle
               cx={barX}
-              cy={baselineY}
+              cy={bottomY}
               r="1"
               fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.6)"}
               opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.5}
@@ -836,10 +864,11 @@
           {/if}
         {/each}
 
+
         <!-- Current year indicator (at the right end) -->
         <circle
           cx={width - 40}
-          cy={baselineY}
+          cy={bottomY}
           r="3"
           fill="rgba(0, 255, 0, 0.9)"
           stroke="rgba(255, 255, 255, 0.6)"
@@ -923,6 +952,7 @@
           </g>
         </g>
       {/each}
+
 
       {#if hasStarted && activeHeartbeats.length === 0}
         <!-- Show flatline when no heatwave is present -->
@@ -1223,6 +1253,7 @@
     animation: flatline-blip-pulse 1s infinite ease-in-out;
   }
 
+
   /* Timeline animations */
   .timeline-baseline {
     transition: x2 0.1s ease-out;
@@ -1265,25 +1296,37 @@
   .current-year-glow {
     animation: current-year-pulse-glow 2s infinite ease-in-out;
   }
-  
+
   .current-date-line {
     animation: date-line-glow 2s infinite ease-in-out;
   }
-  
+
   .current-date-text {
     animation: date-text-glow 2s infinite ease-in-out;
   }
-  
+
   @keyframes date-line-glow {
-    0% { opacity: 0.6; }
-    50% { opacity: 1.0; }
-    100% { opacity: 0.6; }
+    0% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.6;
+    }
   }
-  
+
   @keyframes date-text-glow {
-    0% { opacity: 0.8; }
-    50% { opacity: 1.0; }
-    100% { opacity: 0.8; }
+    0% {
+      opacity: 0.8;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.8;
+    }
   }
 
   @keyframes current-year-glow {
