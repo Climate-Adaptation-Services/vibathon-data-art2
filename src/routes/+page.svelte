@@ -299,17 +299,17 @@
 
   // Animation variables
   let currentDate = new Date(1911, 0, 1) // Start at January 1911
-  // Variable speed timeline - starts fast, ends slow (1.5x faster)
+  // Variable speed timeline - starts fast, ends slow (less drastic slowdown)
   function getTimelineSpeed(): number {
     const currentYear = currentDate.getFullYear()
     const progress = (currentYear - startYear) / (endYear - startYear)
 
-    // Exponential slowdown: fast at start (3.33ms), slow at end (66.67ms) - 1.5x faster
-    const minSpeed = 3.33 // Fastest speed (early years) - 5/1.5
-    const maxSpeed = 66.67 // Slowest speed (recent years) - 100/1.5
+    // More gradual slowdown: fast at start (5ms), slow at end (30ms)
+    const minSpeed = 5 // Fastest speed (early years)
+    const maxSpeed = 30 // Slowest speed (recent years) - less drastic
 
-    // Use exponential curve for smooth transition
-    const speedFactor = Math.pow(progress, 2) // Square for stronger effect
+    // Use linear curve for gentler transition
+    const speedFactor = progress // Linear instead of exponential
     return minSpeed + speedFactor * (maxSpeed - minSpeed)
   }
   let lastMonthUpdateTime = 0
@@ -329,6 +329,12 @@
 
   // Hover state for table-barchart interaction
   let hoveredHeatwaveDate: string | null = null
+
+  // Heartbeat timing control with queuing
+  let lastHeartbeatTime = 0
+  const minHeartbeatInterval = 400 // 0.4 seconds minimum spacing
+  let heartbeatQueue: HeartbeatParams[] = []
+  let queueProcessingTimeout: number | null = null
 
   // New timeline system - persistent year objects that animate position only
   let yearObjects: { year: number; x: number; size: number; opacity: number; showAsDecade?: boolean }[] = []
@@ -556,21 +562,10 @@
     if (matchingHeartbeat) {
       console.log(`Found heatwave for ${currentYearMonth}:`, matchingHeartbeat.heatwaveData)
 
-      // Create new heartbeat instance instead of replacing
-      const newHeartbeat = {
-        id: heartbeatIdCounter++,
-        params: matchingHeartbeat,
-        progress: 0,
-        fadeProgress: 0,
-        isFading: false,
-      }
-      activeHeartbeats = [...activeHeartbeats, newHeartbeat]
-
-      // Add to all heatwaves table (unlimited for full scrolling)
+      // Always add to data immediately
       allHeatwaves = [matchingHeartbeat, ...allHeatwaves]
-      lastHeatwaveInfo = matchingHeartbeat // Store for persistent display
+      lastHeatwaveInfo = matchingHeartbeat
 
-      // Add to displayed heartbeats for timeline
       if (matchingHeartbeat.heatwaveData) {
         displayedHeartbeats = [
           ...displayedHeartbeats,
@@ -582,8 +577,8 @@
         ]
       }
 
-      // Play sound
-      playHeartbeatSound()
+      // Queue the heartbeat for natural timing
+      queueHeartbeat(matchingHeartbeat)
     }
   }
 
@@ -625,6 +620,57 @@
     oscillator.stop(audioContext.currentTime + 0.1)
   }
 
+  // Queue heartbeat for natural timing
+  function queueHeartbeat(heartbeatParams: HeartbeatParams) {
+    heartbeatQueue = [...heartbeatQueue, heartbeatParams]
+    processHeartbeatQueue()
+  }
+
+  // Process heartbeat queue with natural timing
+  function processHeartbeatQueue() {
+    if (heartbeatQueue.length === 0) return
+
+    const currentTime = performance.now()
+    const timeSinceLastHeartbeat = currentTime - lastHeartbeatTime
+
+    if (timeSinceLastHeartbeat >= minHeartbeatInterval) {
+      // Enough time has passed, trigger heartbeat immediately
+      triggerHeartbeat(heartbeatQueue.shift()!)
+    } else {
+      // Too soon, schedule for later
+      const delay = minHeartbeatInterval - timeSinceLastHeartbeat
+
+      if (queueProcessingTimeout) {
+        clearTimeout(queueProcessingTimeout)
+      }
+
+      queueProcessingTimeout = setTimeout(() => {
+        processHeartbeatQueue()
+      }, delay)
+    }
+  }
+
+  // Actually trigger the heartbeat animation and sound
+  function triggerHeartbeat(heartbeatParams: HeartbeatParams) {
+    const newHeartbeat = {
+      id: heartbeatIdCounter++,
+      params: heartbeatParams,
+      progress: 0,
+      fadeProgress: 0,
+      isFading: false,
+    }
+    activeHeartbeats = [...activeHeartbeats, newHeartbeat]
+    lastHeartbeatTime = performance.now()
+
+    // Play sound
+    playHeartbeatSound()
+
+    // Continue processing queue if there are more
+    if (heartbeatQueue.length > 0) {
+      setTimeout(() => processHeartbeatQueue(), minHeartbeatInterval)
+    }
+  }
+
   // Start the visualization
   function startVisualization() {
     if (hasStarted) return // Prevent multiple starts
@@ -641,6 +687,12 @@
     lastHeatwaveInfo = null
     heartbeatIdCounter = 0
     allHeatwaves = []
+    lastHeartbeatTime = 0
+    heartbeatQueue = []
+    if (queueProcessingTimeout) {
+      clearTimeout(queueProcessingTimeout)
+      queueProcessingTimeout = null
+    }
 
 
     // Initialize timeline with years
