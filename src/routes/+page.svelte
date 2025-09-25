@@ -232,94 +232,80 @@
     // Extract parameters
     const { pHeight, qDepth, rHeight, sDepth, tHeight } = params
 
-    // Add subtle ECG noise and variations
-    const subtleNoise = () => (Math.random() - 0.5) * 0.15 + 1 // 0.925 to 1.075 multiplier for subtle variation
-    const baselineNoise = () => (Math.random() - 0.5) * 1 // ±1px baseline drift
-    const microNoise = () => (Math.random() - 0.5) * 0.5 // ±0.5px micro variations
-
-    // Apply subtle noise to all wave components
-    const noisyPHeight = pHeight * subtleNoise()
-    const noisyQDepth = qDepth * subtleNoise()
-    const noisyRHeight = rHeight * subtleNoise()
-    const noisySDepth = sDepth * subtleNoise()
-    const noisyTHeight = tHeight * subtleNoise()
-
-    // Add subtle horizontal timing variations
-    const timingNoise = () => (Math.random() - 0.5) * 0.01 // ±1% timing variation
-
-    // Create baseline drift throughout the signal
-    const baselineDrift1 = baselineNoise()
-    const baselineDrift2 = baselineNoise()
-    const baselineDrift3 = baselineNoise()
-    const baselineDrift4 = baselineNoise()
+    // Use clean, stable values without random noise
+    const cleanPHeight = pHeight
+    const cleanQDepth = qDepth
+    const cleanRHeight = rHeight
+    const cleanSDepth = sDepth
+    const cleanTHeight = tHeight
 
     // Log the actual R peak position
-    const rPeakY = baselineY - noisyRHeight
-    console.log(`R peak will be drawn at Y: ${rPeakY} (baselineY: ${baselineY} - rHeight: ${noisyRHeight})`)
+    const rPeakY = baselineY - cleanRHeight
+    console.log(`R peak will be drawn at Y: ${rPeakY} (baselineY: ${baselineY} - rHeight: ${cleanRHeight})`)
 
-    // Create realistic ECG segments with noise, micro-variations, and baseline drift
+    // Create clean, stable ECG segments
     return [
-      // Start with baseline (with drift)
-      `M ${startX} ${baselineY + baselineDrift1 + microNoise()}`,
-      `L ${startX + lineWidth * (0.15 + timingNoise())} ${baselineY + baselineDrift1 + microNoise()}`,
-      `L ${startX + lineWidth * (0.2 + timingNoise())} ${baselineY + baselineDrift1 + microNoise()}`,
+      // Start with baseline
+      `M ${startX} ${baselineY}`,
+      `L ${startX + lineWidth * 0.15} ${baselineY}`,
+      `L ${startX + lineWidth * 0.2} ${baselineY}`,
 
       // P wave (small bump with realistic shape)
-      `L ${startX + lineWidth * (0.23 + timingNoise())} ${baselineY - noisyPHeight * 0.3 + baselineDrift1 + microNoise()}`, // P wave start
-      `L ${startX + lineWidth * (0.25 + timingNoise())} ${baselineY - noisyPHeight + baselineDrift1 + microNoise()}`, // P peak
-      `L ${startX + lineWidth * (0.27 + timingNoise())} ${baselineY - noisyPHeight * 0.3 + baselineDrift1 + microNoise()}`, // P wave end
-      `L ${startX + lineWidth * (0.3 + timingNoise())} ${baselineY + baselineDrift2 + microNoise()}`,
+      `L ${startX + lineWidth * 0.23} ${baselineY - cleanPHeight * 0.3}`, // P wave start
+      `L ${startX + lineWidth * 0.25} ${baselineY - cleanPHeight}`, // P peak
+      `L ${startX + lineWidth * 0.27} ${baselineY - cleanPHeight * 0.3}`, // P wave end
+      `L ${startX + lineWidth * 0.3} ${baselineY}`,
 
-      // PR segment (flat with slight drift)
-      `L ${startX + lineWidth * (0.32 + timingNoise())} ${baselineY + baselineDrift2 + microNoise()}`,
-      `L ${startX + lineWidth * (0.35 + timingNoise())} ${baselineY + baselineDrift2 + microNoise()}`,
+      // PR segment (flat)
+      `L ${startX + lineWidth * 0.32} ${baselineY}`,
+      `L ${startX + lineWidth * 0.35} ${baselineY}`,
 
-      // QRS complex (sharp and realistic)
+      // QRS complex (sharp and clean)
       // Q wave (small downward)
-      `L ${startX + lineWidth * (0.37 + timingNoise())} ${baselineY + noisyQDepth + baselineDrift2 + microNoise()}`,
+      `L ${startX + lineWidth * 0.37} ${baselineY + cleanQDepth}`,
 
-      // R wave (sharp tall spike with slight asymmetry)
-      `L ${startX + lineWidth * (0.395 + timingNoise())} ${baselineY - noisyRHeight * 0.9 + baselineDrift2 + microNoise()}`, // R wave rise
-      `L ${startX + lineWidth * (0.4 + timingNoise())} ${baselineY - noisyRHeight + baselineDrift2 + microNoise()}`, // R peak
-      `L ${startX + lineWidth * (0.405 + timingNoise())} ${baselineY - noisyRHeight * 0.8 + baselineDrift2 + microNoise()}`, // R wave fall
+      // R wave (sharp tall spike)
+      `L ${startX + lineWidth * 0.395} ${baselineY - cleanRHeight * 0.9}`, // R wave rise
+      `L ${startX + lineWidth * 0.4} ${baselineY - cleanRHeight}`, // R peak
+      `L ${startX + lineWidth * 0.405} ${baselineY - cleanRHeight * 0.8}`, // R wave fall
 
       // S wave (sharp downward)
-      `L ${startX + lineWidth * (0.43 + timingNoise())} ${baselineY + noisySDepth + baselineDrift3 + microNoise()}`,
+      `L ${startX + lineWidth * 0.43} ${baselineY + cleanSDepth}`,
 
-      // Return to baseline with slight overshoot
-      `L ${startX + lineWidth * (0.45 + timingNoise())} ${baselineY - 2 + baselineDrift3 + microNoise()}`, // Slight overshoot
-      `L ${startX + lineWidth * (0.47 + timingNoise())} ${baselineY + baselineDrift3 + microNoise()}`,
+      // Return to baseline
+      `L ${startX + lineWidth * 0.45} ${baselineY}`,
+      `L ${startX + lineWidth * 0.47} ${baselineY}`,
 
-      // ST segment (flat with drift and micro-variations)
-      `L ${startX + lineWidth * (0.5 + timingNoise())} ${baselineY + baselineDrift3 + microNoise()}`,
-      `L ${startX + lineWidth * (0.53 + timingNoise())} ${baselineY + baselineDrift3 + microNoise()}`,
-      `L ${startX + lineWidth * (0.55 + timingNoise())} ${baselineY + baselineDrift3 + microNoise()}`,
+      // ST segment (flat)
+      `L ${startX + lineWidth * 0.5} ${baselineY}`,
+      `L ${startX + lineWidth * 0.53} ${baselineY}`,
+      `L ${startX + lineWidth * 0.55} ${baselineY}`,
 
-      // T wave (broader, more realistic shape)
-      `L ${startX + lineWidth * (0.57 + timingNoise())} ${baselineY - noisyTHeight * 0.2 + baselineDrift3 + microNoise()}`, // T wave start
-      `L ${startX + lineWidth * (0.6 + timingNoise())} ${baselineY - noisyTHeight * 0.8 + baselineDrift4 + microNoise()}`, // T wave rise
-      `L ${startX + lineWidth * (0.62 + timingNoise())} ${baselineY - noisyTHeight + baselineDrift4 + microNoise()}`, // T peak
-      `L ${startX + lineWidth * (0.65 + timingNoise())} ${baselineY - noisyTHeight * 0.6 + baselineDrift4 + microNoise()}`, // T wave fall
-      `L ${startX + lineWidth * (0.68 + timingNoise())} ${baselineY - noisyTHeight * 0.1 + baselineDrift4 + microNoise()}`, // T wave end
-      `L ${startX + lineWidth * (0.7 + timingNoise())} ${baselineY + baselineDrift4 + microNoise()}`,
+      // T wave (broader, clean shape)
+      `L ${startX + lineWidth * 0.57} ${baselineY - cleanTHeight * 0.2}`, // T wave start
+      `L ${startX + lineWidth * 0.6} ${baselineY - cleanTHeight * 0.8}`, // T wave rise
+      `L ${startX + lineWidth * 0.62} ${baselineY - cleanTHeight}`, // T peak
+      `L ${startX + lineWidth * 0.65} ${baselineY - cleanTHeight * 0.6}`, // T wave fall
+      `L ${startX + lineWidth * 0.68} ${baselineY - cleanTHeight * 0.1}`, // T wave end
+      `L ${startX + lineWidth * 0.7} ${baselineY}`,
 
-      // Final baseline with continued drift and noise
-      `L ${startX + lineWidth * (0.8 + timingNoise())} ${baselineY + baselineDrift4 + microNoise()}`,
-      `L ${startX + lineWidth * (0.9 + timingNoise())} ${baselineY + baselineDrift4 + microNoise()}`,
-      `L ${startX + lineWidth} ${baselineY + baselineDrift4 + microNoise()}`,
+      // Final baseline
+      `L ${startX + lineWidth * 0.8} ${baselineY}`,
+      `L ${startX + lineWidth * 0.9} ${baselineY}`,
+      `L ${startX + lineWidth} ${baselineY}`,
     ].join(" ")
   }
 
   // Animation variables
   let currentDate = new Date(1911, 0, 1) // Start at January 1911
-  // Variable speed timeline - starts fast, ends slow
+  // Variable speed timeline - starts fast, ends slow (1.5x faster)
   function getTimelineSpeed(): number {
     const currentYear = currentDate.getFullYear()
     const progress = (currentYear - startYear) / (endYear - startYear)
 
-    // Exponential slowdown: fast at start (5ms), slow at end (100ms)
-    const minSpeed = 5 // Fastest speed (early years)
-    const maxSpeed = 100 // Slowest speed (recent years)
+    // Exponential slowdown: fast at start (3.33ms), slow at end (66.67ms) - 1.5x faster
+    const minSpeed = 3.33 // Fastest speed (early years) - 5/1.5
+    const maxSpeed = 66.67 // Slowest speed (recent years) - 100/1.5
 
     // Use exponential curve for smooth transition
     const speedFactor = Math.pow(progress, 2) // Square for stronger effect
@@ -328,13 +314,10 @@
   let lastMonthUpdateTime = 0
   let animationFrame: number | null = null
 
-  // Current heartbeat state
-  let activeHeartbeat: HeartbeatParams | null = null
+  // Current heartbeat state - now supports multiple concurrent heartbeats
+  let activeHeartbeats: Array<{id: number, params: HeartbeatParams, progress: number, fadeProgress: number, isFading: boolean}> = []
   let lastHeatwaveInfo: HeartbeatParams | null = null
-  let heartbeatProgress = 0
-  let fadeOutProgress = 0
-  let isFadingOut = false
-  let isShowingHeartbeat = false
+  let heartbeatIdCounter = 0
 
   // Store displayed heartbeats for mini graph
   let displayedHeartbeats: { year: string; temp: number; date: string }[] = []
@@ -351,7 +334,7 @@
   // Calculate static decade position with even spacing (1910-2050)
   function calculateDecadePosition(decade: number): { x: number; size: number; opacity: number } {
     const decadesFromStart = (decade - startYear) / 10
-    const totalDecades = (endYear - startYear) / 10 - 1 // 14 decades, but 13 intervals
+    const totalDecades = (endYear - startYear) / 10 // 14 decades total (1910, 1920, ..., 2050)
     
     // Even spacing across the timeline
     const x = timelineMargin + (decadesFromStart / totalDecades) * timelineWidth
@@ -442,6 +425,7 @@
     // Create only decades from 1910 to 2050
     for (let decade = startYear; decade <= endYear; decade += 10) {
       const position = calculateDecadePosition(decade)
+      console.log(`Creating decade: ${decade}`)
       
       yearObjects.push({
         year: decade,
@@ -460,19 +444,31 @@
     // Find the decade before and after the event year
     const currentDecade = Math.floor(eventYear / 10) * 10
     const nextDecade = currentDecade + 10
-    
+
     // Get positions of surrounding decades
     const currentDecadePos = calculateDecadePosition(currentDecade)
     const nextDecadePos = calculateDecadePosition(nextDecade)
-    
+
     // Calculate progress within the decade (0-10 years)
     const yearInDecade = eventYear - currentDecade
     const decadeProgress = yearInDecade / 10 // 0-1 across the decade
-    
+
     // Interpolate position between decades
     const x = currentDecadePos.x + decadeProgress * (nextDecadePos.x - currentDecadePos.x)
-    
+
     return x
+  }
+
+  // Calculate bar height based on temperature for mini barchart
+  function calculateBarHeight(temp: number): number {
+    // Map temperature range (30-42°C) to bar height (5-40px)
+    const minTemp = 30
+    const maxTemp = 42
+    const minHeight = 5
+    const maxHeight = 40
+
+    const normalizedTemp = Math.min(Math.max(temp - minTemp, 0), maxTemp - minTemp) / (maxTemp - minTemp)
+    return minHeight + normalizedTemp * (maxHeight - minHeight)
   }
 
   // Main animation loop - handles both time progression and heartbeat animation
@@ -510,28 +506,27 @@
 
     // Timeline is static - no animation needed
 
-    // Handle heartbeat animation if active
-    if (isShowingHeartbeat && activeHeartbeat) {
-      if (!isFadingOut) {
-        // Drawing phase
-        if (heartbeatProgress < 1) {
-          heartbeatProgress += 0.05 // Animation speed
+    // Handle multiple concurrent heartbeat animations
+    if (activeHeartbeats.length > 0) {
+      activeHeartbeats = activeHeartbeats.map(heartbeat => {
+        if (!heartbeat.isFading) {
+          // Drawing phase
+          if (heartbeat.progress < 1) {
+            return { ...heartbeat, progress: heartbeat.progress + 0.01875 }
+          } else {
+            // Start fading phase
+            return { ...heartbeat, isFading: true }
+          }
         } else {
-          isFadingOut = true
+          // Fading phase - fade out in place
+          if (heartbeat.fadeProgress < 1) {
+            return { ...heartbeat, fadeProgress: heartbeat.fadeProgress + 0.01125 }
+          } else {
+            // Mark for removal
+            return null
+          }
         }
-      } else {
-        // Fade out phase
-        if (fadeOutProgress < 1) {
-          fadeOutProgress += 0.02
-        } else {
-          // Heartbeat complete
-          isShowingHeartbeat = false
-          activeHeartbeat = null
-          heartbeatProgress = 0
-          fadeOutProgress = 0
-          isFadingOut = false
-        }
-      }
+      }).filter(heartbeat => heartbeat !== null)
     }
 
     // Continue animation loop
@@ -552,13 +547,16 @@
     if (matchingHeartbeat) {
       console.log(`Found heatwave for ${currentYearMonth}:`, matchingHeartbeat.heatwaveData)
 
-      // Trigger heartbeat
-      activeHeartbeat = matchingHeartbeat
+      // Create new heartbeat instance instead of replacing
+      const newHeartbeat = {
+        id: heartbeatIdCounter++,
+        params: matchingHeartbeat,
+        progress: 0,
+        fadeProgress: 0,
+        isFading: false
+      }
+      activeHeartbeats = [...activeHeartbeats, newHeartbeat]
       lastHeatwaveInfo = matchingHeartbeat // Store for persistent display
-      isShowingHeartbeat = true
-      heartbeatProgress = 0
-      fadeOutProgress = 0
-      isFadingOut = false
 
       // Add to displayed heartbeats for timeline
       if (matchingHeartbeat.heatwaveData) {
@@ -602,12 +600,9 @@
     displayedHeartbeats = []
 
     // Reset heartbeat state
-    activeHeartbeat = null
+    activeHeartbeats = []
     lastHeatwaveInfo = null
-    isShowingHeartbeat = false
-    heartbeatProgress = 0
-    fadeOutProgress = 0
-    isFadingOut = false
+    heartbeatIdCounter = 0
 
     // Initialize timeline with years
     initializeTimeline()
@@ -697,10 +692,6 @@
 
     <!-- Medical Monitor Style Information Display - Always show the date -->
     <div class="monitor-info">
-      <!-- Historic/Future status only -->
-      <div class="monitor-header">
-        <div class="time-direction">{currentDate.getFullYear() > 2023 ? "PROJECTED" : "HISTORIC"}</div>
-      </div>
 
       <!-- Show last heatwave information (persists until next heatwave) -->
       {#if lastHeatwaveInfo && lastHeatwaveInfo.heatwaveData}
@@ -818,18 +809,29 @@
           </text>
         {/if}
         
-        <!-- Timeline points for heatwave events -->
+        <!-- Mini barchart for heatwave events -->
         {#each displayedHeartbeats as heartbeat, i}
           {#if parseInt(heartbeat.year) <= currentDate.getFullYear()}
-            <circle
-              cx={calculateTimelineXPosition(parseInt(heartbeat.year))}
-              cy={baselineY}
-              r={i === displayedHeartbeats.length - 1 ? 4 : 3}
+            {@const barHeight = calculateBarHeight(heartbeat.temp)}
+            {@const barX = calculateTimelineXPosition(parseInt(heartbeat.year))}
+            <rect
+              x={barX - 1.5}
+              y={baselineY - barHeight}
+              width="3"
+              height={barHeight}
               fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)"}
               stroke={i === displayedHeartbeats.length - 1 ? "rgba(255,255,255,0.8)" : "none"}
-              stroke-width={i === displayedHeartbeats.length - 1 ? 1 : 0}
+              stroke-width={i === displayedHeartbeats.length - 1 ? 0.5 : 0}
               opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.7}
-              class="timeline-point"
+              class="timeline-bar"
+            />
+            <!-- Optional: Add a small indicator at the base -->
+            <circle
+              cx={barX}
+              cy={baselineY}
+              r="1"
+              fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.6)"}
+              opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.5}
             />
           {/if}
         {/each}
@@ -885,40 +887,44 @@
         </g>
       {/if}
 
-      <!-- Show heartbeat when active, otherwise show flatline -->
-      {#if isShowingHeartbeat && activeHeartbeat}
+      <!-- Show all active heartbeats, otherwise show flatline -->
+      {#each activeHeartbeats as heartbeat (heartbeat.id)}
+        {@const fadeOpacity = heartbeat.isFading ? 1 - heartbeat.fadeProgress : 1}
+
         <g class="heartbeat-group">
           <!-- ECG trace with glow effect -->
           <g>
             <!-- Glow effect (background) -->
             <path
-              d={generateHeartlinePath(activeHeartbeat)}
-              stroke={activeHeartbeat.color}
+              d={generateHeartlinePath(heartbeat.params)}
+              stroke={heartbeat.params.color}
               stroke-width="6"
               fill="none"
-              opacity={isFadingOut ? activeHeartbeat.opacity * (1 - fadeOutProgress) * 0.3 : activeHeartbeat.opacity * 0.3}
+              opacity={heartbeat.params.opacity * 0.3 * fadeOpacity}
               pathLength="1000"
-              style="stroke-dasharray: {heartbeatProgress < 1 ? `${1000 * heartbeatProgress} 1000` : '1000 0'}; 
+              style="stroke-dasharray: {heartbeat.progress < 1 ? `${1000 * heartbeat.progress} 1000` : '1000 0'};
                      stroke-dashoffset: 0;
                      filter: blur(2px)"
             />
             <!-- Main ECG trace -->
             <path
-              d={generateHeartlinePath(activeHeartbeat)}
-              stroke={activeHeartbeat.color}
+              d={generateHeartlinePath(heartbeat.params)}
+              stroke={heartbeat.params.color}
               stroke-width="3"
               fill="none"
-              opacity={isFadingOut ? activeHeartbeat.opacity * (1 - fadeOutProgress) : activeHeartbeat.opacity}
+              opacity={heartbeat.params.opacity * fadeOpacity}
               class="heartline-path"
               pathLength="1000"
-              style="stroke-dasharray: {heartbeatProgress < 1 ? `${1000 * heartbeatProgress} 1000` : '1000 0'}; 
+              style="stroke-dasharray: {heartbeat.progress < 1 ? `${1000 * heartbeat.progress} 1000` : '1000 0'};
                      stroke-dashoffset: 0;
                      stroke-linecap: round;
                      stroke-linejoin: round"
             />
           </g>
         </g>
-      {:else if hasStarted}
+      {/each}
+
+      {#if hasStarted && activeHeartbeats.length === 0}
         <!-- Show flatline when no heatwave is present -->
         <g class="flatline-group">
           <line x1="0" y1={baselineY} x2={width} y2={baselineY} stroke="rgba(0, 255, 0, 0.7)" stroke-width="2" class="flatline" />
@@ -1222,8 +1228,13 @@
     transition: x2 0.1s ease-out;
   }
 
-  .timeline-point {
+  .timeline-bar {
     transition: all 0.3s ease-in-out;
+  }
+
+  .timeline-bar:hover {
+    opacity: 1 !important;
+    filter: drop-shadow(0 0 4px rgba(255, 100, 100, 0.8));
   }
 
   .current-year-indicator {
