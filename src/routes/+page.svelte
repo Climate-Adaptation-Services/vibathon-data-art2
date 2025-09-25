@@ -324,6 +324,12 @@
   // Store displayed heartbeats for mini graph
   let displayedHeartbeats: { year: string; temp: number; date: string }[] = []
 
+  // Store all heatwaves for table display (unlimited for full scrolling)
+  let allHeatwaves: HeartbeatParams[] = []
+
+  // Hover state for table-barchart interaction
+  let hoveredHeatwaveDate: string | null = null
+
   // New timeline system - persistent year objects that animate position only
   let yearObjects: { year: number; x: number; size: number; opacity: number; showAsDecade?: boolean }[] = []
 
@@ -559,6 +565,9 @@
         isFading: false,
       }
       activeHeartbeats = [...activeHeartbeats, newHeartbeat]
+
+      // Add to all heatwaves table (unlimited for full scrolling)
+      allHeatwaves = [matchingHeartbeat, ...allHeatwaves]
       lastHeatwaveInfo = matchingHeartbeat // Store for persistent display
 
       // Add to displayed heartbeats for timeline
@@ -631,6 +640,7 @@
     activeHeartbeats = []
     lastHeatwaveInfo = null
     heartbeatIdCounter = 0
+    allHeatwaves = []
 
 
     // Initialize timeline with years
@@ -719,30 +729,46 @@
       </p>
     </div>
 
-    <!-- Medical Monitor Style Information Display - Always show the date -->
+    <!-- Medical Monitor Style Information Display - Scrollable Heatwave Table -->
     <div class="monitor-info">
-      <!-- Show last heatwave information (persists until next heatwave) -->
-      {#if lastHeatwaveInfo && lastHeatwaveInfo.heatwaveData}
-        <div class="monitor-data">
-          <div class="data-item">
-            <span class="label">DATE:</span>
-            <span class="value">{formatDate(lastHeatwaveInfo.heatwaveData.startDate)} - {formatDate(lastHeatwaveInfo.heatwaveData.endDate)}</span>
+      {#if allHeatwaves.length > 0}
+        <div class="heatwave-table-container">
+          <!-- Fixed table header -->
+          <div class="table-header">
+            <div class="header-cell date-col">DATE RANGE</div>
+            <div class="header-cell duration-col">DURATION</div>
+            <div class="header-cell temp-col">MAX TEMP</div>
+            <div class="header-cell tropical-col">TROPICAL DAYS</div>
           </div>
-          <div class="data-separator">|</div>
-          <div class="data-item">
-            <span class="label">DURATION:</span>
-            <span class="value">{lastHeatwaveInfo.heatwaveData.duration} DAYS</span>
+          <!-- Scrollable table body -->
+          <div class="table-body">
+            {#each allHeatwaves as heatwave, i}
+              {#if heatwave.heatwaveData}
+                <div
+                  class="table-row {i === 0 ? 'latest' : ''}"
+                  on:mouseenter={() => hoveredHeatwaveDate = heatwave.heatwaveData.startDate}
+                  on:mouseleave={() => hoveredHeatwaveDate = null}
+                >
+                  <div class="table-cell date-col">
+                    {formatDate(heatwave.heatwaveData.startDate)} - {formatDate(heatwave.heatwaveData.endDate)}
+                  </div>
+                  <div class="table-cell duration-col">
+                    {heatwave.heatwaveData.duration} DAYS
+                  </div>
+                  <div class="table-cell temp-col">
+                    {heatwave.heatwaveData.highestTemp}°C
+                  </div>
+                  <div class="table-cell tropical-col">
+                    {heatwave.heatwaveData.tropicalDays}
+                  </div>
+                </div>
+              {/if}
+            {/each}
           </div>
-          <div class="data-separator">|</div>
-          <div class="data-item">
-            <span class="label">MAX TEMP:</span>
-            <span class="value">{lastHeatwaveInfo.heatwaveData.highestTemp}°C</span>
-          </div>
-          <div class="data-separator">|</div>
-          <div class="data-item">
-            <span class="label">TROPICAL DAYS:</span>
-            <span class="value">{lastHeatwaveInfo.heatwaveData.tropicalDays}</span>
-          </div>
+        </div>
+      {:else}
+        <div class="no-data">
+          <span class="label">MONITORING HEATWAVE ACTIVITY...</span>
         </div>
       {/if}
     </div>
@@ -842,24 +868,26 @@
           {#if parseInt(heartbeat.year) <= currentDate.getFullYear()}
             {@const barHeight = calculateBarHeight(heartbeat.temp)}
             {@const barX = calculateTimelineXPosition(parseInt(heartbeat.year))}
+            {@const isHovered = hoveredHeatwaveDate === heartbeat.date}
+            {@const isLatest = i === displayedHeartbeats.length - 1}
             <rect
               x={barX - 1.5}
               y={bottomY - barHeight}
               width="3"
               height={barHeight}
-              fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)"}
-              stroke={i === displayedHeartbeats.length - 1 ? "rgba(255,255,255,0.8)" : "none"}
-              stroke-width={i === displayedHeartbeats.length - 1 ? 0.5 : 0}
-              opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.7}
-              class="timeline-bar"
+              fill={isHovered ? "rgba(255,255,100,1)" : (isLatest ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)")}
+              stroke={isHovered ? "rgba(255,255,255,1)" : (isLatest ? "rgba(255,255,255,0.8)" : "none")}
+              stroke-width={isHovered ? "2" : (isLatest ? "0.5" : "0")}
+              opacity={isHovered ? "1.0" : (isLatest ? "1.0" : "0.7")}
+              class="timeline-bar {isHovered ? 'hovered' : ''}"
             />
             <!-- Small indicator at the base -->
             <circle
               cx={barX}
               cy={bottomY}
-              r="1"
-              fill={i === displayedHeartbeats.length - 1 ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.6)"}
-              opacity={i === displayedHeartbeats.length - 1 ? 1.0 : 0.5}
+              r={isHovered ? "2" : "1"}
+              fill={isHovered ? "rgba(255,255,100,1)" : (isLatest ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.6)")}
+              opacity={isHovered ? "1.0" : (isLatest ? "1.0" : "0.5")}
             />
           {/if}
         {/each}
@@ -1141,12 +1169,128 @@
     background: rgba(0, 20, 0, 0.9);
     border: 2px solid rgba(0, 255, 0, 0.6);
     border-radius: 8px;
-    padding: 12px 20px; /* Reduced padding for more compact design */
+    padding: 12px 20px;
     font-family: "Courier New", monospace;
-    text-align: center;
     box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
     backdrop-filter: blur(5px);
     max-width: 800px;
+  }
+
+  /* Heatwave Table Styles */
+  .heatwave-table-container {
+    width: 100%;
+    height: 180px;
+    overflow: hidden;
+  }
+
+  .table-header {
+    display: flex;
+    background: rgba(0, 40, 0, 0.8);
+    border-bottom: 1px solid rgba(0, 255, 0, 0.4);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .table-body {
+    height: 156px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 255, 0, 0.6) rgba(0, 40, 0, 0.3);
+  }
+
+  .table-body::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .table-body::-webkit-scrollbar-track {
+    background: rgba(0, 40, 0, 0.3);
+  }
+
+  .table-body::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 0, 0.6);
+    border-radius: 3px;
+  }
+
+  .table-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 255, 0, 0.8);
+  }
+
+  .header-cell, .table-cell {
+    padding: 8px 6px;
+    text-align: center;
+    font-size: 11px;
+  }
+
+  .header-cell {
+    font-weight: bold;
+    color: rgba(0, 220, 0, 0.9);
+    text-shadow: 0 0 3px rgba(0, 255, 0, 0.5);
+    letter-spacing: 0.5px;
+  }
+
+  .table-row {
+    display: flex;
+    border-bottom: 1px solid rgba(0, 100, 0, 0.2);
+    transition: background-color 0.2s ease;
+    cursor: pointer;
+  }
+
+  .table-row:hover {
+    background: rgba(255, 255, 100, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 100, 0.3);
+  }
+
+  .table-row:hover .table-cell {
+    color: rgba(255, 255, 100, 1);
+    text-shadow: 0 0 4px rgba(255, 255, 100, 0.6);
+  }
+
+  .table-row.latest {
+    background: rgba(255, 50, 50, 0.1);
+    border-bottom: 1px solid rgba(255, 50, 50, 0.3);
+  }
+
+  .table-row.latest .table-cell {
+    color: rgba(255, 100, 100, 1);
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(255, 50, 50, 0.4);
+  }
+
+  .table-cell {
+    color: rgba(0, 255, 0, 0.9);
+  }
+
+  .date-col {
+    flex: 2.5;
+    min-width: 160px;
+  }
+
+  .duration-col {
+    flex: 1;
+    min-width: 70px;
+  }
+
+  .temp-col {
+    flex: 1;
+    min-width: 60px;
+  }
+
+  .tropical-col {
+    flex: 1.2;
+    min-width: 80px;
+  }
+
+  .no-data {
+    text-align: center;
+    padding: 20px;
+  }
+
+  .no-data .label {
+    font-size: 12px;
+    color: rgba(0, 180, 0, 0.8);
+    font-weight: bold;
+    letter-spacing: 1px;
   }
 
   .monitor-header {
@@ -1266,6 +1410,12 @@
   .timeline-bar:hover {
     opacity: 1 !important;
     filter: drop-shadow(0 0 4px rgba(255, 100, 100, 0.8));
+  }
+
+  .timeline-bar.hovered {
+    filter: drop-shadow(0 0 6px rgba(255, 255, 100, 0.9));
+    transform: scaleY(1.1);
+    transform-origin: bottom;
   }
 
   .current-year-indicator {
