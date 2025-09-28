@@ -514,6 +514,7 @@
     // Initialize timing
     if (lastMonthUpdateTime === 0) {
       lastMonthUpdateTime = now
+      console.log(`Initializing timing at ${now}`)
     }
 
     // Update time progression with variable speed
@@ -524,12 +525,13 @@
       newDate.setMonth(newDate.getMonth() + 1)
       currentDate = newDate
       lastMonthUpdateTime = now
+      console.log(`Advanced to: ${currentDate.getFullYear()}-${currentDate.getMonth() + 1}`)
 
       // Timeline is static - no dynamic updates needed
 
       // Check if we've reached 2050 - restart from beginning
-      if (currentDate.getFullYear() >= 2050 && currentDate.getMonth() >= 11) {
-        console.log("Reached December 2050 - restarting from beginning")
+      if (currentDate.getFullYear() >= 2050) {
+        console.log(`Reached year ${currentDate.getFullYear()}, month ${currentDate.getMonth() + 1} - restarting from beginning`)
         restartAnimation()
         return
       }
@@ -705,7 +707,7 @@
 
     // Reset all state
     currentDate = new Date(1911, 0, 1)
-    lastMonthUpdateTime = 0
+    lastMonthUpdateTime = 0 // This will be reset in the next animation frame
     displayedHeartbeats = []
     activeHeartbeats = []
     lastHeatwaveInfo = null
@@ -714,6 +716,7 @@
     lastHeartbeatTime = 0
     heartbeatQueue = []
     isPaused = false
+    hasStarted = true // Ensure this stays true
 
     if (queueProcessingTimeout) {
       clearTimeout(queueProcessingTimeout)
@@ -723,8 +726,7 @@
     // Initialize timeline
     initializeTimeline()
 
-    // Continue animation loop without canceling current frame
-    console.log("Animation restarted successfully")
+    console.log("Animation restarted successfully - continuing loop")
   }
 
   // Start the visualization
@@ -881,6 +883,25 @@
         </div>
       {/if}
     </div>
+
+    <!-- Play/Pause Button (top right of screen) -->
+    {#if hasStarted}
+      <div class="screen-controls">
+        <button
+          class="play-pause-screen-button"
+          on:click={togglePause}
+          aria-label={isPaused ? "Resume animation" : "Pause animation"}
+        >
+          {#if isPaused}
+            <!-- Play triangle -->
+            <div class="play-icon">▶</div>
+          {:else}
+            <!-- Pause bars -->
+            <div class="pause-icon">⏸</div>
+          {/if}
+        </button>
+      </div>
+    {/if}
 
     <svg {width} {height} viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet">
       <!-- Black background -->
@@ -1044,55 +1065,6 @@
         </text>
       {/if}
 
-      <!-- Play/Pause Controls (top right) -->
-      {#if hasStarted}
-        <g
-          class="play-pause-button"
-          on:click={togglePause}
-          on:keydown={(e) => (e.key === "Enter" || e.key === " " ? togglePause() : null)}
-          role="button"
-          tabindex="0"
-          aria-label={isPaused ? "Resume animation" : "Pause animation"}
-          style="cursor: pointer;"
-        >
-          <!-- Button background -->
-          <circle
-            cx={width - 40}
-            cy="30"
-            r="20"
-            fill="rgba(0, 40, 0, 0.8)"
-            stroke="rgba(0, 255, 0, 0.8)"
-            stroke-width="2"
-            class="control-bg-circle"
-          />
-          {#if isPaused}
-            <!-- Play arrow (when paused) -->
-            <polygon
-              points="{width - 48},22 {width - 48},38 {width - 28},30"
-              fill="rgba(0, 255, 0, 0.9)"
-              class="control-icon"
-            />
-          {:else}
-            <!-- Pause bars (when playing) -->
-            <rect
-              x={width - 48}
-              y="22"
-              width="5"
-              height="16"
-              fill="rgba(0, 255, 0, 0.9)"
-              class="control-icon"
-            />
-            <rect
-              x={width - 38}
-              y="22"
-              width="5"
-              height="16"
-              fill="rgba(0, 255, 0, 0.9)"
-              class="control-icon"
-            />
-          {/if}
-        </g>
-      {/if}
 
       <!-- Monitor-style corner indicators -->
       <circle cx="20" cy="20" r="3" fill="rgba(0, 255, 0, 0.6)" />
@@ -1344,31 +1316,49 @@
     transition: all 0.2s ease;
   }
 
-  /* Play/Pause Control Styling */
-  .play-pause-button {
+  /* Screen Controls */
+  .screen-controls {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+  }
+
+  .play-pause-screen-button {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(0, 40, 0, 0.9);
+    border: 4px solid rgba(0, 255, 0, 0.8);
+    color: rgba(0, 255, 0, 0.9);
+    font-size: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
     transition: all 0.3s ease;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+    backdrop-filter: blur(5px);
   }
 
-  .play-pause-button:hover .control-bg-circle {
-    fill: rgba(0, 60, 0, 0.9);
-    stroke: rgba(0, 255, 0, 1);
-    stroke-width: 3;
+  .play-pause-screen-button:hover {
+    background: rgba(0, 60, 0, 0.95);
+    border-color: rgba(0, 255, 0, 1);
+    color: rgba(0, 255, 0, 1);
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
+    transform: scale(1.1);
   }
 
-  .play-pause-button:hover .control-icon {
-    fill: rgba(0, 255, 0, 1);
+  .play-pause-screen-button:active {
+    transform: scale(1.05);
   }
 
-  .play-pause-button:active {
-    transform: scale(0.95);
-  }
-
-  .control-bg-circle {
-    transition: all 0.2s ease;
-  }
-
-  .control-icon {
-    transition: all 0.2s ease;
+  .play-icon, .pause-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
   }
 
   /* Pulse animation for current heartbeat point */
