@@ -163,9 +163,6 @@
     // Get the year from the first part of the date
     let year = dateParts.length >= 1 ? dateParts[0] : "Unknown"
 
-    // Use consistent bright red color for all heartbeats
-    const color = "rgba(255, 50, 50, 1)" // Bright red
-
     // Scale R peak height based on temperature (30-42°C maps to 50-150px)
     const temp = heatwave.highestTemp
     const minTemp = 30
@@ -176,6 +173,24 @@
     // Normalize temperature and map to height range
     const normalizedTemp = Math.min(Math.max(temp - minTemp, 0), maxTemp - minTemp) / (maxTemp - minTemp)
     const rHeight = minHeight + normalizedTemp * (maxHeight - minHeight)
+
+    // Use fiery gradient colors for heartbeats based on temperature
+    const tempRatio = normalizedTemp
+    // Create fire-like color progression: orange → red → white-hot
+    let color
+    if (tempRatio < 0.3) {
+      // Cool fires: deep orange
+      color = `rgba(255, ${100 + Math.floor(55 * tempRatio)}, 0, 1)`
+    } else if (tempRatio < 0.7) {
+      // Hot fires: orange to red
+      const redProgress = (tempRatio - 0.3) / 0.4
+      color = `rgba(255, ${155 - Math.floor(100 * redProgress)}, ${Math.floor(20 * redProgress)}, 1)`
+    } else {
+      // Extreme heat: red to white-hot
+      const whiteProgress = (tempRatio - 0.7) / 0.3
+      const whiteComponent = Math.floor(100 * whiteProgress)
+      color = `rgba(255, ${55 + whiteComponent}, ${20 + whiteComponent * 2}, 1)`
+    }
 
     return {
       pHeight: 10 + randomFactor * 15, // P wave: 10-25px
@@ -299,6 +314,7 @@
 
   // Animation variables
   let currentDate = new Date(1911, 0, 1) // Start at January 1911
+  let isPaused = false
   // Variable speed timeline - starts fast, ends slow (less drastic slowdown)
   function getTimelineSpeed(): number {
     const currentYear = currentDate.getFullYear()
@@ -487,7 +503,13 @@
   function mainAnimationLoop(): void {
     const now = performance.now()
 
-    if (!hasStarted) return
+    if (!hasStarted || isPaused) {
+      if (hasStarted && isPaused) {
+        // Continue animation loop even when paused to keep checking
+        animationFrame = requestAnimationFrame(mainAnimationLoop)
+      }
+      return
+    }
 
     // Initialize timing
     if (lastMonthUpdateTime === 0) {
@@ -505,10 +527,10 @@
 
       // Timeline is static - no dynamic updates needed
 
-      // Check if we've reached 2050
+      // Check if we've reached 2050 - restart from beginning
       if (currentDate.getFullYear() >= 2050 && currentDate.getMonth() >= 11) {
-        console.log("Reached December 2050 - stopping")
-        hasStarted = false
+        console.log("Reached December 2050 - restarting from beginning")
+        restartAnimation()
         return
       }
 
@@ -671,11 +693,46 @@
     }
   }
 
+  // Toggle pause/play
+  function togglePause() {
+    isPaused = !isPaused
+    console.log(isPaused ? "Animation paused" : "Animation resumed")
+  }
+
+  // Restart animation from beginning
+  function restartAnimation() {
+    console.log("Restarting animation from beginning")
+
+    // Reset all state
+    currentDate = new Date(1911, 0, 1)
+    lastMonthUpdateTime = 0
+    displayedHeartbeats = []
+    activeHeartbeats = []
+    lastHeatwaveInfo = null
+    heartbeatIdCounter = 0
+    allHeatwaves = []
+    lastHeartbeatTime = 0
+    heartbeatQueue = []
+    isPaused = false
+
+    if (queueProcessingTimeout) {
+      clearTimeout(queueProcessingTimeout)
+      queueProcessingTimeout = null
+    }
+
+    // Initialize timeline
+    initializeTimeline()
+
+    // Continue animation loop without canceling current frame
+    console.log("Animation restarted successfully")
+  }
+
   // Start the visualization
   function startVisualization() {
-    if (hasStarted) return // Prevent multiple starts
+    if (hasStarted && !isPaused) return // Prevent multiple starts when already running
 
     hasStarted = true
+    isPaused = false
 
     // Reset all animation variables
     currentDate = new Date(1911, 0, 1)
@@ -903,10 +960,10 @@
           <!-- Current date text -->
           <text
             x={currentDateX}
-            y={bottomY + 45}
+            y={bottomY + 50}
             text-anchor="middle"
             fill="rgba(255, 50, 50, 1)"
-            font-size="16"
+            font-size="22"
             font-weight="bold"
             font-family="Courier New, monospace"
             class="current-date-text"
@@ -960,6 +1017,83 @@
         <line x1="0" y1={baselineY} x2={width} y2={baselineY} stroke="rgba(0, 255, 0, 0.4)" stroke-width="1.5" stroke-dasharray="5,5" />
       {/if}
 
+      <!-- Current Date Display (top left) -->
+      {#if hasStarted}
+        <text
+          x="25"
+          y="50"
+          fill="rgba(0, 255, 0, 0.9)"
+          font-size="36"
+          font-weight="bold"
+          font-family="Courier New, monospace"
+          class="current-month-year"
+        >
+          {currentDate.getFullYear()}
+        </text>
+        <!-- Historic/Predicted indicator -->
+        <text
+          x="25"
+          y="85"
+          fill={currentDate.getFullYear() < 2026 ? "rgba(200, 200, 200, 0.8)" : "rgba(255, 200, 100, 0.8)"}
+          font-size="24"
+          font-weight="bold"
+          font-family="Courier New, monospace"
+          class="time-period-indicator"
+        >
+          {currentDate.getFullYear() < 2026 ? "HISTORIC" : "PREDICTED"}
+        </text>
+      {/if}
+
+      <!-- Play/Pause Controls (top right) -->
+      {#if hasStarted}
+        <g
+          class="play-pause-button"
+          on:click={togglePause}
+          on:keydown={(e) => (e.key === "Enter" || e.key === " " ? togglePause() : null)}
+          role="button"
+          tabindex="0"
+          aria-label={isPaused ? "Resume animation" : "Pause animation"}
+          style="cursor: pointer;"
+        >
+          <!-- Button background -->
+          <circle
+            cx={width - 40}
+            cy="30"
+            r="20"
+            fill="rgba(0, 40, 0, 0.8)"
+            stroke="rgba(0, 255, 0, 0.8)"
+            stroke-width="2"
+            class="control-bg-circle"
+          />
+          {#if isPaused}
+            <!-- Play arrow (when paused) -->
+            <polygon
+              points="{width - 48},22 {width - 48},38 {width - 28},30"
+              fill="rgba(0, 255, 0, 0.9)"
+              class="control-icon"
+            />
+          {:else}
+            <!-- Pause bars (when playing) -->
+            <rect
+              x={width - 48}
+              y="22"
+              width="5"
+              height="16"
+              fill="rgba(0, 255, 0, 0.9)"
+              class="control-icon"
+            />
+            <rect
+              x={width - 38}
+              y="22"
+              width="5"
+              height="16"
+              fill="rgba(0, 255, 0, 0.9)"
+              class="control-icon"
+            />
+          {/if}
+        </g>
+      {/if}
+
       <!-- Monitor-style corner indicators -->
       <circle cx="20" cy="20" r="3" fill="rgba(0, 255, 0, 0.6)" />
       <circle cx={width - 20} cy="20" r="3" fill="rgba(0, 255, 0, 0.6)" />
@@ -1001,28 +1135,52 @@
         {@const fadeOpacity = heartbeat.isFading ? 1 - heartbeat.fadeProgress : 1}
 
         <g class="heartbeat-group">
-          <!-- ECG trace with glow effect -->
+          <!-- ECG trace with fiery glow effects -->
           <g>
-            <!-- Glow effect (background) -->
+            <!-- Outer glow (fire-like) -->
             <path
               d={generateHeartlinePath(heartbeat.params)}
               stroke={heartbeat.params.color}
-              stroke-width="6"
+              stroke-width="12"
               fill="none"
-              opacity={heartbeat.params.opacity * 0.3 * fadeOpacity}
+              opacity={heartbeat.params.opacity * 0.15 * fadeOpacity}
+              pathLength="1000"
+              style="stroke-dasharray: {heartbeat.progress < 1 ? `${1000 * heartbeat.progress} 1000` : '1000 0'};
+                     stroke-dashoffset: 0;
+                     filter: blur(4px)"
+            />
+            <!-- Middle glow -->
+            <path
+              d={generateHeartlinePath(heartbeat.params)}
+              stroke={heartbeat.params.color}
+              stroke-width="8"
+              fill="none"
+              opacity={heartbeat.params.opacity * 0.25 * fadeOpacity}
               pathLength="1000"
               style="stroke-dasharray: {heartbeat.progress < 1 ? `${1000 * heartbeat.progress} 1000` : '1000 0'};
                      stroke-dashoffset: 0;
                      filter: blur(2px)"
             />
-            <!-- Main ECG trace -->
+            <!-- Inner glow -->
             <path
               d={generateHeartlinePath(heartbeat.params)}
               stroke={heartbeat.params.color}
-              stroke-width="3"
+              stroke-width="5"
               fill="none"
-              opacity={heartbeat.params.opacity * fadeOpacity}
-              class="heartline-path"
+              opacity={heartbeat.params.opacity * 0.4 * fadeOpacity}
+              pathLength="1000"
+              style="stroke-dasharray: {heartbeat.progress < 1 ? `${1000 * heartbeat.progress} 1000` : '1000 0'};
+                     stroke-dashoffset: 0;
+                     filter: blur(1px)"
+            />
+            <!-- Main ECG trace (bright core) -->
+            <path
+              d={generateHeartlinePath(heartbeat.params)}
+              stroke="rgba(255, 255, 200, 1)"
+              stroke-width="2"
+              fill="none"
+              opacity={fadeOpacity}
+              class="heartline-path fiery"
               pathLength="1000"
               style="stroke-dasharray: {heartbeat.progress < 1 ? `${1000 * heartbeat.progress} 1000` : '1000 0'};
                      stroke-dashoffset: 0;
@@ -1095,15 +1253,29 @@
   }
 
   .heartline-path {
-    filter: drop-shadow(0 0 8px rgba(255, 0, 0, 0.7));
+    filter: drop-shadow(0 0 8px rgba(255, 100, 0, 0.8));
     will-change: stroke-dashoffset;
     transition: opacity 0.3s;
   }
 
+  .heartline-path.fiery {
+    filter: drop-shadow(0 0 6px rgba(255, 255, 200, 0.9)) drop-shadow(0 0 12px rgba(255, 150, 0, 0.6));
+    animation: fireFlicker 0.1s infinite alternate;
+  }
+
   .heartline-path:hover {
     opacity: 1 !important;
-    filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.9));
+    filter: drop-shadow(0 0 15px rgba(255, 200, 0, 1)) drop-shadow(0 0 25px rgba(255, 100, 0, 0.8));
     z-index: 10;
+  }
+
+  @keyframes fireFlicker {
+    0% {
+      filter: drop-shadow(0 0 6px rgba(255, 255, 200, 0.9)) drop-shadow(0 0 12px rgba(255, 150, 0, 0.6));
+    }
+    100% {
+      filter: drop-shadow(0 0 8px rgba(255, 255, 200, 1)) drop-shadow(0 0 15px rgba(255, 120, 0, 0.7));
+    }
   }
 
   .data-source {
@@ -1169,6 +1341,33 @@
   }
 
   .play-arrow {
+    transition: all 0.2s ease;
+  }
+
+  /* Play/Pause Control Styling */
+  .play-pause-button {
+    transition: all 0.3s ease;
+  }
+
+  .play-pause-button:hover .control-bg-circle {
+    fill: rgba(0, 60, 0, 0.9);
+    stroke: rgba(0, 255, 0, 1);
+    stroke-width: 3;
+  }
+
+  .play-pause-button:hover .control-icon {
+    fill: rgba(0, 255, 0, 1);
+  }
+
+  .play-pause-button:active {
+    transform: scale(0.95);
+  }
+
+  .control-bg-circle {
+    transition: all 0.2s ease;
+  }
+
+  .control-icon {
     transition: all 0.2s ease;
   }
 
@@ -1271,7 +1470,7 @@
   .header-cell, .table-cell {
     padding: 8px 6px;
     text-align: center;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .header-cell {
@@ -1339,7 +1538,7 @@
   }
 
   .no-data .label {
-    font-size: 12px;
+    font-size: 14px;
     color: rgba(0, 180, 0, 0.8);
     font-weight: bold;
     letter-spacing: 1px;
@@ -1505,6 +1704,44 @@
 
   .current-date-text {
     animation: date-text-glow 2s infinite ease-in-out;
+  }
+
+  .current-month-year {
+    text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
+    animation: month-year-glow 3s infinite ease-in-out;
+  }
+
+  .time-period-indicator {
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.3);
+    letter-spacing: 1px;
+    animation: indicator-glow 2s infinite ease-in-out;
+  }
+
+  @keyframes indicator-glow {
+    0% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1.0;
+    }
+    100% {
+      opacity: 0.6;
+    }
+  }
+
+  @keyframes month-year-glow {
+    0% {
+      opacity: 0.8;
+      text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
+    }
+    50% {
+      opacity: 1.0;
+      text-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
+    }
+    100% {
+      opacity: 0.8;
+      text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
+    }
   }
 
   @keyframes date-line-glow {
