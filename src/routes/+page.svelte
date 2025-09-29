@@ -67,13 +67,13 @@
     return `rgb(${r}, ${g}, ${b})`
   }
 
-  // Format date to show month name without year (e.g., "June 15" instead of "2023-06-15")
+  // Format date to show month name without year (e.g., "15 juni" instead of "2023-06-15")
   function formatDate(dateString: string): string {
     const date = new Date(dateString)
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    const monthNames = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"]
     const month = monthNames[date.getMonth()]
     const day = date.getDate()
-    return `${month} ${day}`
+    return `${day} ${month}`
   }
 
   // Parse CSV data
@@ -86,7 +86,7 @@
 
       const response = await fetch(csvUrl)
       if (!response.ok) {
-        throw new Error(`Failed to fetch CSV: ${response.status} ${response.statusText}`)
+        throw new Error(`Fout bij ophalen CSV: ${response.status} ${response.statusText}`)
       }
 
       const csvText = await response.text()
@@ -101,7 +101,7 @@
       const highestTempIndex = headers.findIndex((h) => h === "Hoogste temperatuur")
 
       if (startDateIndex === -1 || endDateIndex === -1 || highestTempIndex === -1) {
-        throw new Error("Required columns not found in CSV")
+        throw new Error("Vereiste kolommen niet gevonden in CSV")
       }
 
       heatwaves = lines.slice(1).map((line, index) => {
@@ -110,7 +110,7 @@
 
         // Log every 10th record for debugging
         if (index % 10 === 0) {
-          console.log(`Record ${index} - Date: ${values[startDateIndex]}, Temp: ${highestTemp}°C`)
+          console.log(`Record ${index} - Datum: ${values[startDateIndex]}, Temp: ${highestTemp}°C`)
         }
 
         return {
@@ -122,29 +122,29 @@
         }
       })
 
-      console.log(`Loaded ${heatwaves.length} heatwave records`)
+      console.log(`${heatwaves.length} Nederlandse hittegolf records geladen`)
 
       // Log the first few records to inspect the data
-      console.log("First 5 heatwave records:", heatwaves.slice(0, 5))
+      console.log("Eerste 5 hittegolf records:", heatwaves.slice(0, 5))
 
       // Find min and max temperatures for better scaling
       const temperatures = heatwaves.map((hw) => hw.highestTemp)
       const minDataTemp = Math.min(...temperatures)
       const maxDataTemp = Math.max(...temperatures)
-      console.log(`Actual temperature range in data: ${minDataTemp}°C to ${maxDataTemp}°C`)
+      console.log(`Temperatuurbereik in Nederlandse data: ${minDataTemp}°C tot ${maxDataTemp}°C`)
 
       // Store the temperature range globally for use in heartbeat generation
       globalMinTemp = minDataTemp
       globalMaxTemp = maxDataTemp
 
       // Use the original order from the CSV (first row to last row)
-      console.log("Processing heartbeats in original data order (first row to last row)")
+      console.log("Verwerken hartslagen in originele data volgorde (eerste rij naar laatste rij)")
 
       // Generate heartbeats from all heatwave data in original order
       heartbeats = heatwaves.map(generateHeartbeatFromHeatwave)
     } catch (error) {
-      console.error("Error loading CSV data:", error)
-      loadError = error instanceof Error ? error.message : "Unknown error loading data"
+      console.error("Fout bij laden CSV data:", error)
+      loadError = error instanceof Error ? error.message : "Onbekende fout bij laden data"
 
       // Fallback to random data if loading fails
       heartbeats = Array.from({ length: 30 }, () => generateRandomHeartbeatParams())
@@ -335,7 +335,6 @@
   let activeHeartbeats: Array<{ id: number; params: HeartbeatParams; progress: number; fadeProgress: number; isFading: boolean }> = []
   let lastHeatwaveInfo: HeartbeatParams | null = null
   let heartbeatIdCounter = 0
-
 
   // Store displayed heartbeats for mini graph
   let displayedHeartbeats: { year: string; temp: number; date: string }[] = []
@@ -541,7 +540,6 @@
     }
 
     // Timeline is static - no animation needed
-
 
     // Handle multiple concurrent heartbeat animations
     if (activeHeartbeats.length > 0) {
@@ -753,7 +751,6 @@
       queueProcessingTimeout = null
     }
 
-
     // Initialize timeline with years
     initializeTimeline()
 
@@ -818,23 +815,24 @@
   <div class="container">
     {#if isLoading}
       <div class="loading">
-        <p>Loading heatwave data...</p>
+        <p>Nederlandse hittegolf data laden...</p>
       </div>
     {:else if loadError}
       <div class="error">
-        <p>Error loading data: {loadError}</p>
-        <p>Using random heartbeat data instead.</p>
+        <p>Fout bij laden data: {loadError}</p>
+        <p>Gebruikt willekeurige hartslag data in plaats daarvan.</p>
       </div>
     {/if}
 
     <!-- Title and Introduction -->
     <div class="visualization-header">
-      <h1 class="main-title"><span class="heatwave-highlight">Heatwave</span> Heartbeat Monitor</h1>
+      <h1 class="main-title"><span class="heatwave-highlight">Hittegolf</span> Hartslag Monitor</h1>
       <p class="intro-text">
-        Each heartbeat represents a <span class="heatwave-highlight">heatwave</span> event. Watch as climate patterns pulse through time, revealing
-        the rhythm of our changing planet.
+        Elke hartslag representeert een <span class="heatwave-highlight">hittegolf</span> in Nederland. Bekijk hoe klimaatpatronen door de tijd heen
+        pulseren en het ritme van ons veranderende klimaat onthullen.
         <span class="data-source"
-          >Data: <a href="https://raw.githubusercontent.com/sophievanderhorst/data/refs/heads/main/heatwaves.csv" target="_blank">Heatwave Dataset</a
+          >Data: <a href="https://raw.githubusercontent.com/sophievanderhorst/data/refs/heads/main/heatwaves.csv" target="_blank"
+            >Hittegolven in Nederland</a
           ></span
         >
       </p>
@@ -846,10 +844,10 @@
         <div class="heatwave-table-container">
           <!-- Fixed table header -->
           <div class="table-header">
-            <div class="header-cell date-col">DATE RANGE</div>
-            <div class="header-cell duration-col">DURATION</div>
+            <div class="header-cell date-col">PERIODE</div>
+            <div class="header-cell duration-col">DUUR</div>
             <div class="header-cell temp-col">MAX TEMP</div>
-            <div class="header-cell tropical-col">TROPICAL DAYS</div>
+            <div class="header-cell tropical-col">TROPISCHE DAGEN</div>
           </div>
           <!-- Scrollable table body -->
           <div class="table-body">
@@ -857,14 +855,14 @@
               {#if heatwave.heatwaveData}
                 <div
                   class="table-row {i === 0 ? 'latest' : ''}"
-                  on:mouseenter={() => hoveredHeatwaveDate = heatwave.heatwaveData.startDate}
-                  on:mouseleave={() => hoveredHeatwaveDate = null}
+                  on:mouseenter={() => (hoveredHeatwaveDate = heatwave.heatwaveData.startDate)}
+                  on:mouseleave={() => (hoveredHeatwaveDate = null)}
                 >
                   <div class="table-cell date-col">
                     {formatDate(heatwave.heatwaveData.startDate)} - {formatDate(heatwave.heatwaveData.endDate)}
                   </div>
                   <div class="table-cell duration-col">
-                    {heatwave.heatwaveData.duration} DAYS
+                    {heatwave.heatwaveData.duration} DAGEN
                   </div>
                   <div class="table-cell temp-col">
                     {heatwave.heatwaveData.highestTemp}°C
@@ -879,7 +877,7 @@
         </div>
       {:else}
         <div class="no-data">
-          <span class="label">MONITORING HEATWAVE ACTIVITY...</span>
+          <span class="label">HITTEGOLF ACTIVITEIT MONITOREN...</span>
         </div>
       {/if}
     </div>
@@ -887,11 +885,7 @@
     <!-- Play/Pause Button (top right of screen) -->
     {#if hasStarted}
       <div class="screen-controls">
-        <button
-          class="play-pause-screen-button"
-          on:click={togglePause}
-          aria-label={isPaused ? "Resume animation" : "Pause animation"}
-        >
+        <button class="play-pause-screen-button" on:click={togglePause} aria-label={isPaused ? "Animatie hervatten" : "Animatie pauzeren"}>
           {#if isPaused}
             <!-- Play triangle -->
             <div class="play-icon">▶</div>
@@ -928,7 +922,8 @@
 
       <!-- Dynamic timeline baseline (expands as time progresses) -->
       {#if hasStarted}
-        {@const bottomY = height - 80} <!-- Position for mini barchart and timeline - moved higher -->
+        {@const bottomY = height - 80}
+        <!-- Position for mini barchart and timeline - moved higher -->
         <!-- Timeline baseline moved to bottom to overlap with mini barchart -->
         <line x1="40" y1={bottomY} x2={width - 40} y2={bottomY} stroke="rgba(0, 255, 0, 0.6)" stroke-width="2" class="timeline-baseline" />
 
@@ -1005,10 +1000,10 @@
               y={bottomY - barHeight}
               width="3"
               height={barHeight}
-              fill={isHovered ? "rgba(255,255,100,1)" : (isLatest ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)")}
-              stroke={isHovered ? "rgba(255,255,255,1)" : (isLatest ? "rgba(255,255,255,0.8)" : "none")}
-              stroke-width={isHovered ? "2" : (isLatest ? "0.5" : "0")}
-              opacity={isHovered ? "1.0" : (isLatest ? "1.0" : "0.7")}
+              fill={isHovered ? "rgba(255,255,100,1)" : isLatest ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.8)"}
+              stroke={isHovered ? "rgba(255,255,255,1)" : isLatest ? "rgba(255,255,255,0.8)" : "none"}
+              stroke-width={isHovered ? "2" : isLatest ? "0.5" : "0"}
+              opacity={isHovered ? "1.0" : isLatest ? "1.0" : "0.7"}
               class="timeline-bar {isHovered ? 'hovered' : ''}"
             />
             <!-- Small indicator at the base -->
@@ -1016,12 +1011,11 @@
               cx={barX}
               cy={bottomY}
               r={isHovered ? "2" : "1"}
-              fill={isHovered ? "rgba(255,255,100,1)" : (isLatest ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.6)")}
-              opacity={isHovered ? "1.0" : (isLatest ? "1.0" : "0.5")}
+              fill={isHovered ? "rgba(255,255,100,1)" : isLatest ? "rgba(255,100,100,1)" : "rgba(255,60,60,0.6)"}
+              opacity={isHovered ? "1.0" : isLatest ? "1.0" : "0.5"}
             />
           {/if}
         {/each}
-
 
         <!-- Current year indicator (at the right end) -->
         <circle
@@ -1061,10 +1055,9 @@
           font-family="Courier New, monospace"
           class="time-period-indicator"
         >
-          {currentDate.getFullYear() < 2026 ? "HISTORIC" : "PREDICTED"}
+          {currentDate.getFullYear() < 2026 ? "HISTORISCH" : "VOORSPELD"}
         </text>
       {/if}
-
 
       <!-- Monitor-style corner indicators -->
       <circle cx="20" cy="20" r="3" fill="rgba(0, 255, 0, 0.6)" />
@@ -1080,7 +1073,7 @@
           on:keydown={(e) => (e.key === "Enter" || e.key === " " ? startVisualization() : null)}
           role="button"
           tabindex="0"
-          aria-label="Start climate heartbeat visualization"
+          aria-label="Start Nederlandse hittegolf hartslag visualisatie"
           style="cursor: pointer;"
         >
           <!-- Semi-transparent background circle -->
@@ -1162,7 +1155,6 @@
           </g>
         </g>
       {/each}
-
 
       {#if hasStarted && activeHeartbeats.length === 0}
         <!-- Show flatline when no heatwave is present -->
@@ -1353,7 +1345,8 @@
     transform: scale(1.05);
   }
 
-  .play-icon, .pause-icon {
+  .play-icon,
+  .pause-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1457,7 +1450,8 @@
     background: rgba(0, 255, 0, 0.8);
   }
 
-  .header-cell, .table-cell {
+  .header-cell,
+  .table-cell {
     padding: 8px 6px;
     text-align: center;
     font-size: 13px;
@@ -1638,7 +1632,6 @@
     animation: flatline-blip-pulse 1s infinite ease-in-out;
   }
 
-
   /* Timeline animations */
   .timeline-baseline {
     transition: x2 0.1s ease-out;
@@ -1712,7 +1705,7 @@
       opacity: 0.6;
     }
     50% {
-      opacity: 1.0;
+      opacity: 1;
     }
     100% {
       opacity: 0.6;
@@ -1725,7 +1718,7 @@
       text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
     }
     50% {
-      opacity: 1.0;
+      opacity: 1;
       text-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
     }
     100% {
